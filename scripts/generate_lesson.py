@@ -240,7 +240,7 @@ def main():
     print("🤖 Calling Claude API...")
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4000,
+        max_tokens=8000,
         system=LESSON_SYSTEM_PROMPT,
         messages=[
             {"role": "user", "content": build_lesson_prompt(topic, existing_ids)}
