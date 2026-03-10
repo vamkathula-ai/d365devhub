@@ -1171,6 +1171,21 @@ nav{position:fixed;top:0;left:0;right:0;z-index:300;display:flex;align-items:cen
   font-family: 'JetBrains Mono', monospace;
   margin-bottom: 8px;
 }
+
+.lc-section { margin-bottom: 28px; }
+.lc-h2 { font-size: 1.05rem; font-weight: 700; color: var(--accent); margin-bottom: 12px; font-family: 'Syne', sans-serif; }
+.lc-p { color: rgba(255,255,255,.75); line-height: 1.75; font-size: .92rem; }
+.lc-list { padding-left: 20px; color: rgba(255,255,255,.75); line-height: 1.8; font-size: .9rem; }
+.lc-list li { margin-bottom: 6px; }
+.lc-warn-box { background: rgba(245,158,11,.05); border-left: 3px solid #f59e0b; padding: 16px 20px; border-radius: 0 8px 8px 0; }
+.lc-tip-box  { background: rgba(16,185,129,.05);  border-left: 3px solid #10b981; padding: 16px 20px; border-radius: 0 8px 8px 0; }
+.lc-quiz-q   { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+.lc-quiz-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.lc-quiz-opt  { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; cursor: pointer; font-size: .88rem; color: rgba(255,255,255,.8); transition: all .15s; }
+.lc-quiz-opt:hover { border-color: var(--accent); background: rgba(0,212,255,.05); }
+.opt-letter { font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; min-width: 18px; }
+.lc-quiz-exp { margin-top: 12px; padding: 10px 14px; background: rgba(16,185,129,.08); border-radius: 8px; font-size: .85rem; color: rgba(255,255,255,.8); line-height: 1.6; }
+.code-block-title { font-weight: 700; color: var(--accent); margin: 16px 0 4px; font-family: 'Syne', sans-serif; }
 </style>
 </head>
 <body>
@@ -4712,6 +4727,110 @@ function filterSidebar(val){
 }
 
 // ── LESSON RENDERING ──────────────────────────────────
+
+// ── LESSON CONTENT RENDERER ────────────────────────────────────
+// Handles both old string-format lessons and new auto-generated object-format
+function renderLessonContent(l) {
+  const c = l.content;
+
+  // Old format: content is a plain HTML string
+  if (typeof c === 'string') return c || '';
+
+  // New auto-generated format: content is an object
+  if (!c || typeof c !== 'object') return '<p style="color:var(--muted)">Content coming soon.</p>';
+
+  let html = '';
+
+  // Overview
+  if (c.overview) {
+    html += `<div class="lc-section">
+      <h2 class="lc-h2">📖 Overview</h2>
+      <p class="lc-p">${c.overview.replace(/\n/g,'<br>')}</p>
+    </div>`;
+  }
+
+  // Theory
+  if (c.theory) {
+    html += `<div class="lc-section">
+      <h2 class="lc-h2">🧠 Technical Deep Dive</h2>
+      <p class="lc-p">${c.theory.replace(/\n/g,'<br>')}</p>
+    </div>`;
+  }
+
+  // Code examples
+  if (c.code && typeof c.code === 'string' && c.code.trim()) {
+    html += `<div class="lc-section">
+      <h2 class="lc-h2">💻 Code Examples</h2>
+      ${c.code}
+    </div>`;
+  }
+
+  // Key points
+  if (c.keyPoints?.length) {
+    html += `<div class="lc-section">
+      <h2 class="lc-h2">✅ Key Takeaways</h2>
+      <ul class="lc-list">
+        ${c.keyPoints.map(p => `<li>${p}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // Gotchas
+  if (c.gotchas?.length) {
+    html += `<div class="lc-section lc-warn-box">
+      <h2 class="lc-h2">⚠️ Common Gotchas</h2>
+      <ul class="lc-list">
+        ${c.gotchas.map(g => `<li>${g}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // Performance tips
+  if (c.perfTips?.length) {
+    html += `<div class="lc-section lc-tip-box">
+      <h2 class="lc-h2">⚡ Performance Tips</h2>
+      <ul class="lc-list">
+        ${c.perfTips.map(t => `<li>${t}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // Quiz
+  if (c.quiz?.length) {
+    html += `<div class="lc-section">
+      <h2 class="lc-h2">🧪 Quick Quiz</h2>
+      ${c.quiz.map((q, qi) => `
+        <div class="lc-quiz-q" id="quiz-${qi}">
+          <p class="lc-p" style="font-weight:600;margin-bottom:10px">${qi+1}. ${q.q}</p>
+          <div class="lc-quiz-opts">
+            ${q.options.map((opt, oi) => `
+              <div class="lc-quiz-opt" onclick="checkQuizOpt(${qi},${oi},${q.answer},'${q.explanation?.replace(/'/g,"\'")||''}')">
+                <span class="opt-letter">${['A','B','C','D'][oi]}</span> ${opt}
+              </div>`).join('')}
+          </div>
+          <div class="lc-quiz-exp" id="quiz-exp-${qi}" style="display:none"></div>
+        </div>`).join('')}
+    </div>`;
+  }
+
+  if (!html) html = '<p style="color:var(--muted)">Full lesson content loading...</p>';
+  return html;
+}
+
+function checkQuizOpt(qi, oi, correct, explanation) {
+  const opts = document.querySelectorAll('#quiz-' + qi + ' .lc-quiz-opt');
+  opts.forEach((el, i) => {
+    el.style.pointerEvents = 'none';
+    if (i === correct) el.style.borderColor = '#10b981';
+    else if (i === oi && i !== correct) el.style.borderColor = '#ef4444';
+  });
+  const expEl = document.getElementById('quiz-exp-' + qi);
+  if (expEl) {
+    expEl.style.display = 'block';
+    expEl.innerHTML = '<span style="color:#10b981;font-weight:700">' + (oi === correct ? '✅ Correct! ' : '❌ Incorrect. ') + '</span>' + explanation;
+  }
+}
+
 function loadLesson(id){
   const l=LESSONS[id];
   if(!l){toast('Lesson not found','err');return;}
@@ -4740,7 +4859,7 @@ function loadLesson(id){
     <div class="lc-breadcrumb"><span>D365DevHub</span><span class="sep">/</span><span>${secName}</span><span class="sep">/</span><span class="cur">${l.title}</span></div>
     <div class="lc-title">${l.title}</div>
     <div class="lc-meta">${chips}</div>
-    <div class="lc-body">${l.content||''}</div>
+    <div class="lc-body">${renderLessonContent(l)}</div>
     <div class="lesson-nav">${prevBtn}${nextBtn}</div>
   `;
   completedLessons.add(id);
