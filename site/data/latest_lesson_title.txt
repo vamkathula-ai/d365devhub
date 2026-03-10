@@ -1,1 +1,1 @@
-Display & Edit Methods in X++
+Delegates & Event-Driven X++

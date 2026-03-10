@@ -277,5 +277,102 @@
     },
     "generated_date": "2026-03-10",
     "auto_generated": true
+  },
+  {
+    "id": "xpp_delegates",
+    "title": "Delegates & Event-Driven X++",
+    "section": "X++ Language",
+    "level": "Intermediate",
+    "duration": "18 min read",
+    "tags": [
+      "delegates",
+      "events",
+      "event-driven",
+      "eventing",
+      "observer-pattern"
+    ],
+    "summary": "Master X++ delegates and event-driven programming to build loosely-coupled, extensible business logic in D365 F&O.",
+    "content": {
+      "overview": "Delegates in X++ are type-safe function pointers that enable event-driven programming and the Observer pattern in D365 F&O. Unlike traditional inheritance-based extensibility, delegates provide a publish-subscribe mechanism where multiple subscribers can react to business events without tight coupling to the publisher. This is crucial for ISV solutions, customizations, and integrations that need to respond to standard business processes without modifying core Microsoft code.\n\nDelegates are extensively used throughout D365 F&O's standard application, from form events (FormDataSourceEventArgs) to business logic events in classes like SalesTable and PurchTable. Understanding delegates is essential for modern X++ development, as they're the foundation for Chain of Command (CoC) extensibility and custom business event frameworks.\n\nWhile delegates add a layer of indirection that can impact performance if misused, they're invaluable for building maintainable, loosely-coupled solutions that survive application updates and enable multiple customizations to coexist peacefully.",
+      "theory": "X++ delegates are implemented as special AOT objects under the \\Classes node with the 'delegate' keyword. They define a contract (method signature) that subscriber methods must implement. The runtime maintains a subscription list for each delegate instance, invoking all subscribers sequentially when the delegate is called. This follows the multicast delegate pattern from .NET but with X++ semantics.\n\nThe D365 F&O framework uses delegates extensively in the Application Platform layer. For example, FormDataSource uses delegates like 'validatingWrite' and 'written' to allow customizations to participate in form data operations. The SysExtensionFramework leverages delegates for plugin architectures, and the Business Events framework uses delegates to publish integration events.\n\nDelegates in X++ support both static and instance methods as subscribers. Static delegates are defined at the class level and share subscription lists across all instances, while instance delegates maintain per-object subscription lists. The subscription mechanism uses weak references to prevent memory leaks when subscriber objects are garbage collected. Understanding this distinction is crucial for avoiding subscription lifecycle issues in complex business scenarios.",
+      "code_examples": [
+        {
+          "title": "Basic Delegate Definition and Usage",
+          "description": "Creating a delegate for sales order validation with multiple subscribers",
+          "language": "xpp",
+          "code": "// Define delegate in a business logic class\npublic class SalesOrderProcessor extends RunBaseBatch\n{\n    // Delegate definition - must specify return type and parameters\n    delegate boolean validateSalesOrder(SalesTable _salesTable, str _context)\n    {\n    }\n    \n    public boolean processSalesOrder(SalesId _salesId)\n    {\n        SalesTable salesTable;\n        boolean isValid;\n        \n        select firstonly salesTable\n            where salesTable.SalesId == _salesId;\n            \n        if (!salesTable.RecId)\n        {\n            throw error(strFmt(\"Sales order %1 not found\", _salesId));\n        }\n        \n        // Invoke delegate - all subscribers will be called\n        isValid = this.validateSalesOrder(salesTable, \"ProcessOrder\");\n        \n        if (isValid)\n        {\n            info(strFmt(\"Sales order %1 validated successfully\", _salesId));\n            return true;\n        }\n        else\n        {\n            error(strFmt(\"Sales order %1 validation failed\", _salesId));\n            return false;\n        }\n    }\n    \n    // Example subscriber method\n    public boolean validateCreditLimit(SalesTable _salesTable, str _context)\n    {\n        CustTable custTable;\n        \n        select firstonly custTable\n            where custTable.AccountNum == _salesTable.CustAccount;\n            \n        if (custTable.CreditMax > 0 && _salesTable.SalesBalanceMST > custTable.CreditMax)\n        {\n            warning(strFmt(\"Customer %1 exceeds credit limit\", custTable.AccountNum));\n            return false;\n        }\n        \n        return true;\n    }\n    \n    protected void new()\n    {\n        super();\n        \n        // Subscribe to the delegate during object initialization\n        this.validateSalesOrder += eventHandler(this.validateCreditLimit);\n    }\n}"
+        },
+        {
+          "title": "Advanced Delegate Pattern with Error Handling",
+          "description": "Production-grade delegate usage with subscription management and error isolation",
+          "language": "xpp",
+          "code": "// Advanced delegate pattern for inventory transaction events\npublic class InventTransactionEventManager\n{\n    // Static delegate for system-wide inventory events\n    static delegate void inventTransactionPosted(InventTrans _inventTrans, InventTransOrigin _inventTransOrigin)\n    {\n    }\n    \n    private Map subscriberMap;\n    private boolean isEventProcessing;\n    \n    protected void new()\n    {\n        super();\n        this.subscriberMap = new Map(Types::String, Types::Class);\n        this.isEventProcessing = false;\n    }\n    \n    // Safe subscription method with duplicate prevention\n    public void subscribeToInventoryEvents(str _subscriberId, Common _subscriberObject, str _methodName)\n    {\n        DictMethod dictMethod;\n        \n        if (this.subscriberMap.exists(_subscriberId))\n        {\n            warning(strFmt(\"Subscriber %1 already registered\", _subscriberId));\n            return;\n        }\n        \n        dictMethod = new DictMethod(classIdGet(_subscriberObject), _methodName);\n        \n        if (!dictMethod || dictMethod.returnType() != Types::Void)\n        {\n            throw error(strFmt(\"Invalid subscriber method %1::%2\", classStr(_subscriberObject), _methodName));\n        }\n        \n        try\n        {\n            InventTransactionEventManager::inventTransactionPosted += eventHandler(_subscriberObject, _methodName);\n            this.subscriberMap.insert(_subscriberId, _subscriberObject);\n            info(strFmt(\"Successfully subscribed %1 to inventory events\", _subscriberId));\n        }\n        catch (Exception::Error)\n        {\n            error(strFmt(\"Failed to subscribe %1: %2\", _subscriberId, Exception::getLastError()));\n        }\n    }\n    \n    // Safe event publishing with error isolation\n    public void publishInventoryTransaction(InventTrans _inventTrans)\n    {\n        InventTransOrigin inventTransOrigin;\n        \n        if (this.isEventProcessing)\n        {\n            // Prevent recursive event processing\n            return;\n        }\n        \n        select firstonly inventTransOrigin\n            where inventTransOrigin.RecId == _inventTrans.InventTransOrigin;\n            \n        this.isEventProcessing = true;\n        \n        try\n        {\n            // Delegate call with error isolation\n            InventTransactionEventManager::inventTransactionPosted(_inventTrans, inventTransOrigin);\n        }\n        catch (Exception::Error)\n        {\n            // Log but don't propagate subscriber errors\n            System.Diagnostics.EventLog::writeEntry(\n                \"D365FO_InventoryEvents\",\n                strFmt(\"Error in inventory event subscriber: %1\", Exception::getLastError()),\n                System.Diagnostics.EventLogEntryType::Error\n            );\n        }\n        finally\n        {\n            this.isEventProcessing = false;\n        }\n    }\n    \n    // Cleanup method to prevent memory leaks\n    public void finalize()\n    {\n        MapEnumerator enumerator;\n        \n        if (this.subscriberMap)\n        {\n            enumerator = this.subscriberMap.getEnumerator();\n            \n            while (enumerator.moveNext())\n            {\n                try\n                {\n                    InventTransactionEventManager::inventTransactionPosted -= eventHandler(enumerator.currentValue());\n                }\n                catch\n                {\n                    // Ignore unsubscription errors during cleanup\n                }\n            }\n        }\n        \n        super();\n    }\n}"
+        },
+        {
+          "title": "Form Delegate Integration",
+          "description": "Integrating delegates with form events for dynamic UI behavior",
+          "language": "xpp",
+          "code": "// Form extension using delegates for dynamic behavior\npublic class SalesTableForm_Extension\n{\n    // Form-level delegate for custom validation\n    delegate boolean validateFormData(FormDataSource _dataSource, Common _record)\n    {\n    }\n    \n    [FormDataSourceEventHandler(formDataSourceStr(SalesTable, SalesTable), FormDataSourceEventType::ValidatingWrite)]\n    public static void SalesTable_OnValidatingWrite(FormDataSource sender, FormDataSourceEventArgs e)\n    {\n        SalesTable salesTable;\n        FormRun formRun;\n        SalesTableForm_Extension formExt;\n        boolean isValid = true;\n        \n        salesTable = sender.cursor() as SalesTable;\n        formRun = sender.formRun();\n        \n        // Get form extension instance\n        formExt = formRun as SalesTableForm_Extension;\n        \n        if (formExt)\n        {\n            try\n            {\n                // Invoke form delegate for custom validations\n                isValid = formExt.validateFormData(sender, salesTable);\n                \n                if (!isValid)\n                {\n                    e.result(false); // Cancel the write operation\n                    error(\"Custom validation failed for sales order\");\n                }\n            }\n            catch (Exception::Error)\n            {\n                e.result(false);\n                error(strFmt(\"Validation error: %1\", Exception::getLastError()));\n            }\n        }\n    }\n    \n    // Custom validation subscriber\n    private boolean validateSalesOrderRules(FormDataSource _dataSource, Common _record)\n    {\n        SalesTable salesTable = _record as SalesTable;\n        CustTable custTable;\n        \n        if (!salesTable)\n            return true;\n            \n        // Custom business rule: High-value orders require manager approval\n        if (salesTable.SalesBalanceMST > 10000)\n        {\n            select firstonly custTable\n                where custTable.AccountNum == salesTable.CustAccount;\n                \n            if (custTable.CustGroup != \"VIP\")\n            {\n                if (!this.checkManagerApproval(salesTable.SalesId))\n                {\n                    error(\"Orders over $10,000 require manager approval\");\n                    return false;\n                }\n            }\n        }\n        \n        return true;\n    }\n    \n    private boolean checkManagerApproval(SalesId _salesId)\n    {\n        // Simulate approval check\n        return Global::hasMenuItemAccess(menuItemActionStr(SalesTableApproval), MenuItemType::Action);\n    }\n    \n    [FormEventHandler(formStr(SalesTable), FormEventType::Initialized)]\n    public static void SalesTable_OnInitialized(xFormRun sender, FormEventArgs e)\n    {\n        SalesTableForm_Extension formExt;\n        \n        formExt = sender as SalesTableForm_Extension;\n        \n        if (formExt)\n        {\n            // Subscribe to form delegate during initialization\n            formExt.validateFormData += eventHandler(formExt.validateSalesOrderRules);\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Delegates enable loose coupling by allowing multiple subscribers to react to events without knowing about each other or the publisher",
+        "Use += and -= operators to subscribe/unsubscribe from delegates — always clean up subscriptions to prevent memory leaks",
+        "Static delegates share subscription lists across all instances, while instance delegates maintain per-object subscriptions",
+        "Delegate calls are synchronous and sequential — if one subscriber throws an exception, subsequent subscribers won't execute",
+        "FormDataSourceEventArgs and FormEventArgs are built on delegates, making them the foundation of modern D365 F&O form extensibility"
+      ],
+      "gotchas": [
+        "Memory leaks from orphaned subscriptions — always unsubscribe in finalize() or when the subscriber object is no longer needed, especially for static delegates",
+        "Exception propagation stops delegate chain — wrap delegate calls in try/catch to prevent one failing subscriber from breaking others",
+        "Recursive delegate calls can cause stack overflow — implement isProcessing flags to detect and prevent recursive event scenarios"
+      ],
+      "performance_tips": [
+        "Minimize delegate subscriber count and complexity since all subscribers execute synchronously on each delegate call",
+        "Use conditional logic in subscribers to exit early when processing isn't needed for the current context or record state"
+      ],
+      "related_topics": [
+        "xpp_coc",
+        "xpp_classes",
+        "xpp_security"
+      ],
+      "quiz": [
+        {
+          "q": "What happens when one subscriber method throws an unhandled exception during delegate execution?",
+          "options": [
+            "All subscribers continue to execute normally",
+            "Subsequent subscribers in the chain are not executed",
+            "Only the first subscriber is affected",
+            "The delegate automatically retries the failed subscriber"
+          ],
+          "answer": 1,
+          "explanation": "When a subscriber throws an unhandled exception, the delegate call chain stops and subsequent subscribers are not executed. This is why production code should wrap delegate calls in try/catch blocks to isolate subscriber failures."
+        },
+        {
+          "q": "How do static delegates differ from instance delegates in terms of subscription management?",
+          "options": [
+            "Static delegates maintain per-object subscription lists",
+            "Static delegates share subscription lists across all class instances",
+            "Instance delegates are faster than static delegates",
+            "There is no difference between static and instance delegates"
+          ],
+          "answer": 1,
+          "explanation": "Static delegates maintain a single, shared subscription list across all instances of the class, while instance delegates maintain separate subscription lists for each object instance. This affects memory management and subscription lifecycle."
+        },
+        {
+          "q": "Which operator is used to unsubscribe from a delegate in X++?",
+          "options": [
+            "--",
+            "-=",
+            "remove()",
+            "unsubscribe()"
+          ],
+          "answer": 1,
+          "explanation": "The -= operator is used to unsubscribe from delegates in X++, just like += is used to subscribe. This follows the same pattern as C# multicast delegate syntax."
+        }
+      ]
+    },
+    "generated_date": "2026-03-10",
+    "auto_generated": true
   }
 ]
