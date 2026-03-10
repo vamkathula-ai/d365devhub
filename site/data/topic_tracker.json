@@ -1,5 +1,5 @@
 {
-  "last_index": -1,
+  "last_index": 0,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -12,9 +12,10 @@
     "xpp_security",
     "xpp_financial",
     "ai_intro",
-    "ai_mcp"
+    "ai_mcp",
+    "xpp_display_methods"
   ],
-  "last_run": null,
-  "last_title": null,
+  "last_run": "2026-03-10",
+  "last_title": "Display & Edit Methods in X++",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

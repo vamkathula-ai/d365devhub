@@ -5,7 +5,11 @@
     "section": "X++ Language",
     "level": "Beginner",
     "duration": "15 min read",
-    "tags": ["X++", "AOT", "Basics"],
+    "tags": [
+      "X++",
+      "AOT",
+      "Basics"
+    ],
     "summary": "Learn the fundamentals of X++ programming language and the Application Object Tree.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -16,7 +20,11 @@
     "section": "X++ Language",
     "level": "Beginner",
     "duration": "20 min read",
-    "tags": ["EDTs", "Enums", "Types"],
+    "tags": [
+      "EDTs",
+      "Enums",
+      "Types"
+    ],
     "summary": "Master base data types, Extended Data Types, and Enumerations in D365 F&O.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -27,7 +35,11 @@
     "section": "X++ Language",
     "level": "Beginner",
     "duration": "25 min read",
-    "tags": ["Select", "Query", "Data Access"],
+    "tags": [
+      "Select",
+      "Query",
+      "Data Access"
+    ],
     "summary": "Master X++ select statements for efficient data retrieval from D365 F&O tables.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -38,7 +50,12 @@
     "section": "X++ Language",
     "level": "Beginner",
     "duration": "30 min read",
-    "tags": ["Tables", "CRUD", "ttsbegin", "ttscommit"],
+    "tags": [
+      "Tables",
+      "CRUD",
+      "ttsbegin",
+      "ttscommit"
+    ],
     "summary": "Learn CRUD operations and transaction management in D365 F&O.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -49,7 +66,11 @@
     "section": "X++ Language",
     "level": "Intermediate",
     "duration": "35 min read",
-    "tags": ["OOP", "Classes", "Interfaces"],
+    "tags": [
+      "OOP",
+      "Classes",
+      "Interfaces"
+    ],
     "summary": "Object-oriented programming patterns in X++ with classes and interfaces.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -60,7 +81,11 @@
     "section": "Extensions",
     "level": "Intermediate",
     "duration": "30 min read",
-    "tags": ["CoC", "Extensions", "Override"],
+    "tags": [
+      "CoC",
+      "Extensions",
+      "Override"
+    ],
     "summary": "Extend D365 F&O behavior using Chain of Command without overlayering.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -71,7 +96,11 @@
     "section": "Batch & Workflow",
     "level": "Intermediate",
     "duration": "35 min read",
-    "tags": ["Batch", "SysOperation", "Background"],
+    "tags": [
+      "Batch",
+      "SysOperation",
+      "Background"
+    ],
     "summary": "Build robust batch jobs using the SysOperation framework.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -82,7 +111,11 @@
     "section": "Batch & Workflow",
     "level": "Expert",
     "duration": "45 min read",
-    "tags": ["Workflow", "Approval", "Provider"],
+    "tags": [
+      "Workflow",
+      "Approval",
+      "Provider"
+    ],
     "summary": "Configure and extend D365 F&O workflow framework.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -93,7 +126,12 @@
     "section": "Configuration",
     "level": "Expert",
     "duration": "40 min read",
-    "tags": ["Security", "XDS", "Roles", "SOD"],
+    "tags": [
+      "Security",
+      "XDS",
+      "Roles",
+      "SOD"
+    ],
     "summary": "Implement D365 F&O security with roles, duties, privileges and XDS policies.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -104,7 +142,11 @@
     "section": "Finance",
     "level": "Expert",
     "duration": "50 min read",
-    "tags": ["Ledger", "Posting", "Finance"],
+    "tags": [
+      "Ledger",
+      "Posting",
+      "Finance"
+    ],
     "summary": "Master the D365 F&O financial posting engine and ledger framework.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -115,7 +157,11 @@
     "section": "Agentic AI",
     "level": "Expert",
     "duration": "40 min read",
-    "tags": ["AI", "LangChain", "Agents"],
+    "tags": [
+      "AI",
+      "LangChain",
+      "Agents"
+    ],
     "summary": "Design AI agents that interact with D365 F&O autonomously.",
     "generated_date": "2025-03-01",
     "auto_generated": false
@@ -126,9 +172,110 @@
     "section": "Agentic AI",
     "level": "Expert",
     "duration": "45 min read",
-    "tags": ["MCP", "AI", "Protocol"],
+    "tags": [
+      "MCP",
+      "AI",
+      "Protocol"
+    ],
     "summary": "Expose D365 F&O capabilities as tools via the Model Context Protocol.",
     "generated_date": "2025-03-01",
     "auto_generated": false
+  },
+  {
+    "id": "xpp_display_methods",
+    "title": "Display & Edit Methods in X++",
+    "section": "X++ Language",
+    "level": "Intermediate",
+    "duration": "12 min read",
+    "tags": [
+      "display-methods",
+      "edit-methods",
+      "table-extensions",
+      "form-controls",
+      "calculated-fields"
+    ],
+    "summary": "Master display and edit methods to create calculated fields, custom UI behaviors, and data transformations in D365 F&O forms and reports.",
+    "content": {
+      "overview": "Display and edit methods are one of X++'s most powerful features for creating calculated fields and custom UI behaviors without modifying base application tables. These methods execute on-demand when forms render or reports generate, allowing you to present transformed data, perform calculations, or control field editability based on runtime conditions. Unlike stored database fields, display/edit methods are computed in real-time, making them perfect for derived values, status indicators, and conditional formatting.\n\nIn D365 F&O architecture, display methods are read-only calculated fields that return values for display purposes, while edit methods provide two-way data binding for complex field interactions. They're essential for customizations that need to present data differently than it's stored, implement business logic for field validation, or create composite fields that combine multiple table fields. Understanding their execution context, caching behavior, and performance implications is crucial for building responsive, maintainable solutions.",
+      "theory": "Display and edit methods are declared with the [Display] and [Edit] attributes respectively, and must follow specific naming and signature conventions. The framework automatically discovers these methods through reflection and binds them to form controls or report fields based on the Extended Data Type (EDT) specified in the attribute. The method execution occurs within the table's context, giving you access to all table fields and methods through the 'this' reference.\n\nThe caching mechanism is critical to understand: display methods are cached per record until the record's data changes or the cache is explicitly invalidated using the table's reread() method. This prevents redundant calculations but can cause stale data if external dependencies change. The SysTableBrowser class and form data sources handle this caching automatically, but custom scenarios may require manual cache management.\n\nFor form integration, display/edit methods bound to form controls automatically participate in the form's data binding lifecycle. The FormDataSource calls these methods during record navigation, refresh operations, and field validation. Edit methods receive the new value as a parameter and must handle validation, transformation, and persistence to underlying table fields. They should call the table's validateField() method to trigger standard validation frameworks.",
+      "code_examples": [
+        {
+          "title": "Basic Display Method with Business Logic",
+          "description": "A display method on CustTable that calculates customer credit utilization percentage with proper error handling and null checking",
+          "language": "xpp",
+          "code": "// CustTable table extension\n[ExtensionOf(tableStr(CustTable))]\nfinal class CustTable_Extension\n{\n    [Display(\"Credit utilization %\")]\n    public display Percent creditUtilizationPct()\n    {\n        CustTrans       custTrans;\n        AmountMST       totalBalance = 0;\n        CreditMax       creditLimit;\n        Percent         utilizationPct = 0;\n        \n        try\n        {\n            creditLimit = this.creditMax();\n            if (creditLimit == 0)\n            {\n                return 0; // Avoid division by zero\n            }\n            \n            // Sum outstanding balance from CustTrans\n            select sum(AmountMST) from custTrans\n                where custTrans.AccountNum == this.AccountNum\n                   && custTrans.Closed == NoYes::No;\n            \n            totalBalance = custTrans.AmountMST;\n            utilizationPct = (abs(totalBalance) * 100) / creditLimit;\n            \n            return min(utilizationPct, 999.99); // Cap at 999.99%\n        }\n        catch (Exception::Error)\n        {\n            error(\"Error calculating credit utilization for customer %1\", this.AccountNum);\n            return 0;\n        }\n    }\n    \n    [Display(\"Payment terms description\")]\n    public display PaymTermDescription paymentTermsDesc()\n    {\n        PaymTerm paymTerm;\n        \n        if (!this.PaymTermId)\n        {\n            return \"\";\n        }\n        \n        select firstonly Description from paymTerm\n            where paymTerm.PaymTermId == this.PaymTermId;\n            \n        return paymTerm.Description;\n    }\n}"
+        },
+        {
+          "title": "Advanced Edit Method with Validation",
+          "description": "An edit method that handles complex field interactions, validation, and automatic field updates when dependencies change",
+          "language": "xpp",
+          "code": "// SalesTable table extension\n[ExtensionOf(tableStr(SalesTable))]\nfinal class SalesTable_Extension\n{\n    [Edit(\"Delivery window days\")]\n    public edit Days deliveryWindowDays(boolean _set = false, Days _days = 0)\n    {\n        CustTable       custTable;\n        InventSiteId    siteId;\n        \n        if (_set)\n        {\n            if (_days < 0)\n            {\n                throw error(\"Delivery window cannot be negative\");\n            }\n            \n            if (_days > 365)\n            {\n                throw error(\"Delivery window cannot exceed 365 days\");\n            }\n            \n            // Validate against customer's delivery requirements\n            custTable = CustTable::find(this.CustAccount);\n            if (custTable.DlvModeId)\n            {\n                DlvMode dlvMode = DlvMode::find(custTable.DlvModeId);\n                if (_days > dlvMode.MaxDeliveryDays && dlvMode.MaxDeliveryDays > 0)\n                {\n                    throw error(\"Delivery window exceeds maximum allowed for delivery mode %1 (%2 days)\",\n                              dlvMode.Code, dlvMode.MaxDeliveryDays);\n                }\n            }\n            \n            // Store in a custom field (assumes DeliveryWindowDays field exists)\n            this.DeliveryWindowDays = _days;\n            \n            // Auto-calculate delivery date if shipping date exists\n            if (this.ShippingDateRequested != dateNull())\n            {\n                this.DeliveryDate = this.ShippingDateRequested + _days;\n                info(\"Delivery date automatically updated to %1\", this.DeliveryDate);\n            }\n            \n            // Validate field to trigger any additional validation\n            this.validateField(fieldNum(SalesTable, DeliveryWindowDays));\n        }\n        \n        return this.DeliveryWindowDays;\n    }\n    \n    [Edit(\"Priority level\")]\n    public edit str priorityLevel(boolean _set = false, str _priority = \"\")\n    {\n        Priority    priorityEnum;\n        \n        if (_set)\n        {\n            _priority = strUpr(strLTrim(strRTrim(_priority)));\n            \n            switch (_priority)\n            {\n                case \"HIGH\", \"URGENT\", \"1\":\n                    priorityEnum = Priority::High;\n                    break;\n                case \"MEDIUM\", \"NORMAL\", \"2\":\n                    priorityEnum = Priority::Medium;\n                    break;\n                case \"LOW\", \"3\":\n                    priorityEnum = Priority::Low;\n                    break;\n                default:\n                    throw error(\"Invalid priority level. Use HIGH, MEDIUM, or LOW\");\n            }\n            \n            this.Priority = priorityEnum;\n            \n            // Trigger dependent field updates\n            this.modifiedField(fieldNum(SalesTable, Priority));\n        }\n        \n        // Return string representation\n        switch (this.Priority)\n        {\n            case Priority::High:\n                return \"HIGH\";\n            case Priority::Medium:\n                return \"MEDIUM\";\n            case Priority::Low:\n                return \"LOW\";\n            default:\n                return \"UNDEFINED\";\n        }\n    }\n}"
+        },
+        {
+          "title": "Performance-Optimized Display Method with Caching",
+          "description": "A complex display method that implements custom caching and batch data retrieval to avoid N+1 query problems",
+          "language": "xpp",
+          "code": "// VendTable table extension with static caching\n[ExtensionOf(tableStr(VendTable))]\nfinal class VendTable_Extension\n{\n    private static Map vendorOrderCountCache;\n    private static utcdatetime cacheTimestamp;\n    private static int cacheDurationMinutes = 15;\n    \n    [Display(\"Open PO count\")]\n    public display Integer openPurchOrderCount()\n    {\n        PurchTable      purchTable;\n        Integer         orderCount = 0;\n        utcdatetime     currentTime = DateTimeUtil::utcNow();\n        \n        // Initialize cache if not exists\n        if (!vendorOrderCountCache)\n        {\n            vendorOrderCountCache = new Map(Types::String, Types::Integer);\n            cacheTimestamp = currentTime;\n        }\n        \n        // Check cache expiry\n        if (DateTimeUtil::getDifference(currentTime, cacheTimestamp) > (cacheDurationMinutes * 60))\n        {\n            vendorOrderCountCache.empty();\n            cacheTimestamp = currentTime;\n        }\n        \n        // Check cache first\n        if (vendorOrderCountCache.exists(this.AccountNum))\n        {\n            return vendorOrderCountCache.lookup(this.AccountNum);\n        }\n        \n        try\n        {\n            select count(RecId) from purchTable\n                where purchTable.OrderAccount == this.AccountNum\n                   && purchTable.PurchStatus == PurchStatus::Backorder;\n            \n            orderCount = purchTable.RecId;\n            \n            // Cache the result\n            vendorOrderCountCache.insert(this.AccountNum, orderCount);\n        }\n        catch (Exception::Error)\n        {\n            warning(\"Unable to retrieve purchase order count for vendor %1\", this.AccountNum);\n            orderCount = -1; // Indicate error state\n        }\n        \n        return orderCount;\n    }\n    \n    // Static method to preload cache for multiple vendors (call from form init)\n    public static void preloadOrderCounts(Set _vendorAccounts)\n    {\n        PurchTable      purchTable;\n        VendAccount     vendorAccount;\n        SetEnumerator   enumerator;\n        Map             countMap = new Map(Types::String, Types::Integer);\n        \n        if (!_vendorAccounts || _vendorAccounts.elements() == 0)\n        {\n            return;\n        }\n        \n        // Batch query to get all counts at once\n        while select OrderAccount, count(RecId) from purchTable\n            group by OrderAccount\n            where purchTable.PurchStatus == PurchStatus::Backorder\n        {\n            if (_vendorAccounts.in(purchTable.OrderAccount))\n            {\n                countMap.insert(purchTable.OrderAccount, purchTable.RecId);\n            }\n        }\n        \n        // Initialize cache with results\n        vendorOrderCountCache = countMap;\n        cacheTimestamp = DateTimeUtil::utcNow();\n        \n        info(\"Preloaded purchase order counts for %1 vendors\", countMap.elements());\n    }\n    \n    // Method to invalidate cache when PO data changes\n    public static void invalidateOrderCountCache(VendAccount _vendorAccount = \"\")\n    {\n        if (!vendorOrderCountCache)\n        {\n            return;\n        }\n        \n        if (_vendorAccount)\n        {\n            vendorOrderCountCache.remove(_vendorAccount);\n        }\n        else\n        {\n            vendorOrderCountCache.empty();\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Display methods are read-only and execute on-demand — they should never modify table data directly, only return calculated or transformed values for presentation",
+        "Edit methods provide bidirectional data binding — the boolean parameter indicates if it's a get (_set=false) or set (_set=true) operation, and you must handle both scenarios",
+        "Method signatures must match exact patterns — display methods return the EDT type and take no parameters, edit methods return EDT type and take boolean + value parameters",
+        "Caching behavior is automatic but controllable — the framework caches results per record until data changes, but you can force refresh with table.reread() or implement custom caching",
+        "Performance implications are significant — display methods execute for every visible record in grids, so optimize queries and consider batch loading for expensive operations"
+      ],
+      "gotchas": [
+        "Display methods in grids execute for EVERY visible row — if your grid shows 50 records and your display method does a database query, that's 50 queries. Use static caching or preload data to avoid N+1 problems",
+        "Edit method validation exceptions don't automatically rollback — wrap database modifications in ttsbegin/ttscommit blocks and handle rollback explicitly in catch blocks to maintain data consistency",
+        "Recursive display method calls cause stack overflow — if display method A calls a method that triggers display method B, which calls back to A, you'll crash. Use static flags or redesign the dependency chain"
+      ],
+      "performance_tips": [
+        "Implement static caching for expensive display methods that show the same data across multiple records — use Maps with cache expiry logic to balance performance and data freshness",
+        "Use batch preloading in form initialization — call a static method that loads all required data in a single query, then cache results for individual display method calls"
+      ],
+      "related_topics": [
+        "xpp_tables",
+        "form_data_sources",
+        "xpp_caching"
+      ],
+      "quiz": [
+        {
+          "q": "What happens when a display method is bound to a grid column showing 100 records?",
+          "options": [
+            "The method executes once and the result is shared",
+            "The method executes 100 times, once per record",
+            "The method executes only for visible rows on screen",
+            "The method is cached and executes only when data changes"
+          ],
+          "answer": 1,
+          "explanation": "Display methods execute once for each record in the grid, which can cause performance issues. This is why caching and batch preloading are crucial for expensive operations."
+        },
+        {
+          "q": "In an edit method, how do you determine if you should return the current value or set a new value?",
+          "options": [
+            "Check if the second parameter is null",
+            "Check the boolean _set parameter",
+            "Check if the method was called from a form",
+            "Check the table's current state"
+          ],
+          "answer": 1,
+          "explanation": "Edit methods use the boolean _set parameter to determine the operation mode: false means get/return current value, true means set/validate the new value provided in the second parameter."
+        },
+        {
+          "q": "What is the best way to handle database queries in display methods for optimal performance?",
+          "options": [
+            "Use direct SQL queries instead of X++ select statements",
+            "Implement static caching with expiry logic",
+            "Always use firstonly in select statements",
+            "Call the display method recursively to build results"
+          ],
+          "answer": 1,
+          "explanation": "Static caching with expiry logic is the best approach because it prevents repeated database queries for the same data while ensuring data freshness through cache invalidation strategies."
+        }
+      ]
+    },
+    "generated_date": "2026-03-10",
+    "auto_generated": true
   }
 ]
