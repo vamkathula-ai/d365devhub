@@ -471,5 +471,102 @@
     },
     "generated_date": "2026-03-11",
     "auto_generated": true
+  },
+  {
+    "id": "xpp_containers",
+    "title": "Containers: Pack, Unpack & Serialize",
+    "section": "X++ Language",
+    "level": "Intermediate",
+    "duration": "12 min read",
+    "tags": [
+      "containers",
+      "serialization",
+      "data-structures",
+      "pack-unpack",
+      "x++"
+    ],
+    "summary": "Master X++ containers for efficient data serialization, multi-type collections, and parameter passing in D365 F&O development.",
+    "content": {
+      "overview": "Containers in X++ are heterogeneous data structures that can hold multiple values of different types in a single variable. Unlike arrays or lists, containers are immutable and use zero-based indexing, making them ideal for data serialization, parameter passing between tiers, and temporary data storage. They're extensively used in D365 F&O for batch job parameters, report data contracts, and inter-class communication where type safety isn't the primary concern. Understanding containers is crucial for working with legacy code, SysOperation framework, and scenarios requiring lightweight data transport across application boundaries.",
+      "theory": "Containers are implemented as variant arrays in the kernel, stored as packed binary data that can efficiently serialize/deserialize across client-server boundaries. The SysContainer class provides helper methods, while the kernel functions conPeek(), conPoke(), conLen(), and conIns() offer direct manipulation. Containers excel in scenarios like SysOperationDataContractBase implementations, where RunBase-derived classes need to serialize parameters for batch execution. The pack() and unpack() pattern is fundamental to D365's batch framework, allowing complex objects to persist their state. However, containers sacrifice type safety for flexibility—there's no compile-time validation of element types, making them prone to runtime errors if not handled carefully. Modern D365 development favors strongly-typed data contracts over containers, but understanding them remains essential for framework integration and legacy system maintenance.",
+      "code_examples": [
+        {
+          "title": "Basic Container Operations and Type Safety",
+          "description": "Demonstrates fundamental container operations, type checking, and common manipulation patterns used in D365 batch jobs",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Demonstrates basic container operations with proper error handling\n/// </summary>\nstatic void containerBasicOperations()\n{\n    container               con;\n    str                     custName;\n    real                    amount;\n    date                    invoiceDate;\n    int                     i;\n    \n    // Building a container with mixed types\n    con = ['USMF', 1000.50, today()];\n    \n    // Type-safe extraction with validation\n    if (conLen(con) >= 3)\n    {\n        if (typeOf(conPeek(con, 1)) == Types::String)\n        {\n            custName = conPeek(con, 1);\n        }\n        \n        if (typeOf(conPeek(con, 2)) == Types::Real)\n        {\n            amount = conPeek(con, 2);\n        }\n        \n        if (typeOf(conPeek(con, 3)) == Types::Date)\n        {\n            invoiceDate = conPeek(con, 3);\n        }\n        \n        info(strFmt(\"Customer: %1, Amount: %2, Date: %3\", \n                    custName, amount, invoiceDate));\n    }\n    \n    // Container modification (creates new container)\n    con = conPoke(con, 2, 1500.75); // Update amount\n    con = conIns(con, 4, 'Updated'); // Insert at position 4\n    \n    info(strFmt(\"Container length after modifications: %1\", conLen(con)));\n    \n    // Iterate through container safely\n    for (i = 1; i <= conLen(con); i++)\n    {\n        anytype value = conPeek(con, i);\n        info(strFmt(\"Position %1: %2 (Type: %3)\", \n                    i, any2Str(value), enum2Str(typeOf(value))));\n    }\n}"
+        },
+        {
+          "title": "RunBase Pack/Unpack Pattern Implementation",
+          "description": "Production-grade example showing how containers serialize batch job parameters in the SysOperation framework",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Custom batch job class demonstrating container serialization\n/// Similar to classes like CustAgingReportController\n/// </summary>\nclass MyCustomBatchJob extends RunBaseBatch\n{\n    // Business parameters\n    CustAccount         custAccount;\n    FromDate            fromDate;\n    ToDate              toDate;\n    boolean             includeOnHold;\n    real                minAmount;\n    \n    // Container version for compatibility\n    private static final int CurrentVersion = 1;\n    \n    protected container pack()\n    {\n        return [CurrentVersion, custAccount, fromDate, toDate, \n                includeOnHold, minAmount];\n    }\n    \n    protected boolean unpack(container _packedClass)\n    {\n        int         version;\n        boolean     ret = false;\n        \n        try\n        {\n            switch (conLen(_packedClass))\n            {\n                case 6: // Current version\n                    [version, custAccount, fromDate, toDate, \n                     includeOnHold, minAmount] = _packedClass;\n                    \n                    if (version == CurrentVersion)\n                    {\n                        ret = true;\n                    }\n                    break;\n                    \n                case 5: // Legacy version without minAmount\n                    [version, custAccount, fromDate, toDate, \n                     includeOnHold] = _packedClass;\n                    \n                    if (version == 0) // Legacy version\n                    {\n                        minAmount = 0.0; // Default value\n                        ret = true;\n                    }\n                    break;\n                    \n                default:\n                    ret = super(_packedClass);\n                    break;\n            }\n        }\n        catch (Exception::Error)\n        {\n            error(\"Failed to deserialize batch job parameters\");\n            ret = false;\n        }\n        \n        return ret;\n    }\n    \n    public void run()\n    {\n        CustTable           custTable;\n        CustTrans           custTrans;\n        \n        if (!this.validate())\n        {\n            throw error(\"Batch job validation failed\");\n        }\n        \n        ttsbegin;\n        \n        try\n        {\n            while select custTable\n                where custTable.AccountNum == custAccount\n                    join custTrans\n                    where custTrans.AccountNum == custTable.AccountNum\n                        && custTrans.TransDate >= fromDate\n                        && custTrans.TransDate <= toDate\n                        && (!includeOnHold || custTrans.OnHold == NoYes::Yes)\n                        && abs(custTrans.AmountCur) >= minAmount\n            {\n                // Process customer transactions\n                info(strFmt(\"Processing: %1 - %2\", \n                           custTrans.Voucher, custTrans.AmountCur));\n            }\n            \n            ttscommit;\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            throw;\n        }\n    }\n    \n    private boolean validate()\n    {\n        if (!custAccount)\n        {\n            error(\"Customer account is required\");\n            return false;\n        }\n        \n        if (fromDate > toDate)\n        {\n            error(\"From date cannot be greater than to date\");\n            return false;\n        }\n        \n        return true;\n    }\n    \n    public static void main(Args _args)\n    {\n        MyCustomBatchJob batchJob = new MyCustomBatchJob();\n        \n        if (_args && _args.dataset() == tableNum(CustTable))\n        {\n            CustTable custTable = _args.record();\n            batchJob.custAccount = custTable.AccountNum;\n        }\n        \n        if (_args.caller())\n        {\n            batchJob.fromDate = dateStartMth(today());\n            batchJob.toDate = today();\n            batchJob.includeOnHold = true;\n            batchJob.minAmount = 100.0;\n        }\n        \n        if (batchJob.prompt())\n        {\n            batchJob.runOperation();\n        }\n    }\n}"
+        },
+        {
+          "title": "Advanced Container Serialization for Complex Objects",
+          "description": "Shows how to serialize complex business objects using containers, including nested structures and collection handling",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Advanced container serialization for complex business data\n/// Used in scenarios like report data contracts or service responses\n/// </summary>\nclass CustomerOrderSummary\n{\n    CustAccount                     custAccount;\n    Name                            custName;\n    List                            orderList;\n    Map                             categoryTotals;\n    \n    private static final int        CurrentVersion = 2;\n    \n    public void new()\n    {\n        orderList = new List(Types::Container);\n        categoryTotals = new Map(Types::String, Types::Real);\n    }\n    \n    /// <summary>\n    /// Serialize object state to container\n    /// </summary>\n    public container pack()\n    {\n        container       ordersCon = conNull();\n        container       categoriesCon = conNull();\n        ListEnumerator  orderEnum;\n        MapEnumerator   categoryEnum;\n        \n        // Serialize order list\n        orderEnum = orderList.getEnumerator();\n        while (orderEnum.moveNext())\n        {\n            ordersCon = conIns(ordersCon, conLen(ordersCon) + 1, \n                              orderEnum.current());\n        }\n        \n        // Serialize category totals map\n        categoryEnum = categoryTotals.getEnumerator();\n        while (categoryEnum.moveNext())\n        {\n            container categoryPair = [categoryEnum.currentKey(), \n                                    categoryEnum.currentValue()];\n            categoriesCon = conIns(categoriesCon, conLen(categoriesCon) + 1, \n                                  categoryPair);\n        }\n        \n        return [CurrentVersion, custAccount, custName, \n                ordersCon, categoriesCon];\n    }\n    \n    /// <summary>\n    /// Deserialize container to object state\n    /// </summary>\n    public boolean unpack(container _packedData)\n    {\n        int         version;\n        container   ordersCon;\n        container   categoriesCon;\n        int         i;\n        boolean     ret = false;\n        \n        try\n        {\n            if (conLen(_packedData) >= 5)\n            {\n                [version, custAccount, custName, \n                 ordersCon, categoriesCon] = _packedData;\n                \n                if (version >= 1 && version <= CurrentVersion)\n                {\n                    // Clear existing collections\n                    orderList = new List(Types::Container);\n                    categoryTotals = new Map(Types::String, Types::Real);\n                    \n                    // Restore order list\n                    for (i = 1; i <= conLen(ordersCon); i++)\n                    {\n                        container orderData = conPeek(ordersCon, i);\n                        orderList.addEnd(orderData);\n                    }\n                    \n                    // Restore category totals map\n                    for (i = 1; i <= conLen(categoriesCon); i++)\n                    {\n                        container   categoryPair = conPeek(categoriesCon, i);\n                        str         categoryKey;\n                        real        categoryValue;\n                        \n                        if (conLen(categoryPair) == 2)\n                        {\n                            [categoryKey, categoryValue] = categoryPair;\n                            categoryTotals.insert(categoryKey, categoryValue);\n                        }\n                    }\n                    \n                    ret = true;\n                }\n            }\n        }\n        catch (Exception::Error)\n        {\n            error(strFmt(\"Failed to deserialize CustomerOrderSummary: %1\", \n                        CLRInterop::getLastException().ToString()));\n            ret = false;\n        }\n        \n        return ret;\n    }\n    \n    /// <summary>\n    /// Add order to summary\n    /// </summary>\n    public void addOrder(SalesId _salesId, real _amount, str _category)\n    {\n        container orderData = [_salesId, _amount, _category, today()];\n        orderList.addEnd(orderData);\n        \n        // Update category total\n        if (categoryTotals.exists(_category))\n        {\n            real currentTotal = categoryTotals.lookup(_category);\n            categoryTotals.insert(_category, currentTotal + _amount);\n        }\n        else\n        {\n            categoryTotals.insert(_category, _amount);\n        }\n    }\n    \n    /// <summary>\n    /// Test serialization roundtrip\n    /// </summary>\n    public static void testSerialization()\n    {\n        CustomerOrderSummary    original = new CustomerOrderSummary();\n        CustomerOrderSummary    deserialized = new CustomerOrderSummary();\n        container               serialized;\n        \n        // Setup test data\n        original.custAccount = 'US-001';\n        original.custName = 'Contoso Retail San Francisco';\n        original.addOrder('SO-000001', 1500.00, 'Electronics');\n        original.addOrder('SO-000002', 800.50, 'Clothing');\n        original.addOrder('SO-000003', 2200.75, 'Electronics');\n        \n        // Serialize\n        serialized = original.pack();\n        info(strFmt(\"Serialized container length: %1\", conLen(serialized)));\n        \n        // Deserialize\n        if (deserialized.unpack(serialized))\n        {\n            info(strFmt(\"Successfully deserialized customer: %1 (%2)\", \n                       deserialized.custAccount, deserialized.custName));\n            info(strFmt(\"Order count: %1\", deserialized.orderList.elements()));\n            info(strFmt(\"Category count: %1\", deserialized.categoryTotals.elements()));\n        }\n        else\n        {\n            error(\"Deserialization failed\");\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Containers are immutable — each modification creates a new container, making them memory-intensive for frequent updates",
+        "Use pack()/unpack() pattern with version numbers for backward-compatible serialization in RunBase classes",
+        "Always validate container length and element types before extraction to prevent runtime exceptions",
+        "conPeek() uses 1-based indexing, not 0-based like most programming languages",
+        "Containers excel for parameter serialization and cross-tier communication but lack compile-time type safety"
+      ],
+      "gotchas": [
+        "Container elements are not strongly typed — conPeek(con, 1) might return a string today and an integer tomorrow, causing runtime failures. Always use typeOf() validation before casting",
+        "Modifying containers in loops creates performance bottlenecks — each conPoke() or conIns() allocates a new container. Use List or Map collections for dynamic data, then convert to container when serialization is needed",
+        "Empty containers evaluate to false in boolean contexts, but conLen(conNull()) returns 0, not false — test with conLen(con) > 0 for clarity and consistency across different contexts"
+      ],
+      "performance_tips": [
+        "For large datasets, build containers once and pass them around rather than rebuilding — container creation has significant overhead compared to passing references",
+        "When deserializing complex objects, validate the entire container structure before extracting elements to fail fast and avoid partial state corruption"
+      ],
+      "related_topics": [
+        "xpp_classes",
+        "xpp_batch",
+        "xpp_types"
+      ],
+      "quiz": [
+        {
+          "q": "What happens when you execute conPoke(con, 2, 'newValue') on an existing container?",
+          "options": [
+            "The original container is modified in place",
+            "A new container is created with the updated value",
+            "An exception is thrown",
+            "The operation is ignored"
+          ],
+          "answer": 1,
+          "explanation": "Containers are immutable in X++. conPoke() creates and returns a new container with the specified position updated, leaving the original container unchanged. This immutability is crucial for thread safety and serialization consistency."
+        },
+        {
+          "q": "In a RunBase.pack() method, why should you include a version number as the first element?",
+          "options": [
+            "For debugging purposes only",
+            "To enable backward compatibility during upgrades",
+            "To improve serialization performance",
+            "It's required by the framework"
+          ],
+          "answer": 1,
+          "explanation": "Including a version number allows the unpack() method to handle different container structures gracefully. When the class evolves, you can detect older versions and provide appropriate defaults or migration logic, ensuring batch jobs don't break after code updates."
+        },
+        {
+          "q": "What is the most significant risk when using containers for data transport?",
+          "options": [
+            "Poor performance compared to XML",
+            "Memory leaks from improper disposal",
+            "Loss of compile-time type safety",
+            "Incompatibility with batch processing"
+          ],
+          "answer": 2,
+          "explanation": "Containers sacrifice compile-time type safety for flexibility. You can store any type in any position, and conPeek() returns anytype. Without proper type validation using typeOf(), you risk runtime exceptions when assumptions about element types prove incorrect."
+        }
+      ]
+    },
+    "generated_date": "2026-03-12",
+    "auto_generated": true
   }
 ]
