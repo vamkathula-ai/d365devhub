@@ -1,5 +1,5 @@
 {
-  "last_index": 4,
+  "last_index": 5,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -17,9 +17,10 @@
     "xpp_delegates",
     "xpp_crosscompany",
     "xpp_containers",
-    "xpp_reflection"
+    "xpp_reflection",
+    "xpp_runbase"
   ],
-  "last_run": "2026-03-13",
-  "last_title": "Reflection: DictTable, DictField APIs",
+  "last_run": "2026-03-14",
+  "last_title": "RunBase & RunBaseBatch Framework",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
