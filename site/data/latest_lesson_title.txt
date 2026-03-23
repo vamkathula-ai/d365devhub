@@ -1,1 +1,1 @@
-insert_recordset & update_recordset
+delete_from & Bulk Operations

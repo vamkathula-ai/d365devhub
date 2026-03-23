@@ -1,5 +1,5 @@
 {
-  "last_index": 13,
+  "last_index": 14,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -26,9 +26,10 @@
     "xpp_label_files",
     "xpp_edt_base",
     "xpp_postload",
-    "xpp_insert_update"
+    "xpp_insert_update",
+    "xpp_delete_from"
   ],
-  "last_run": "2026-03-22",
-  "last_title": "insert_recordset & update_recordset",
+  "last_run": "2026-03-23",
+  "last_title": "delete_from & Bulk Operations",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

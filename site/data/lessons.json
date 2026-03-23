@@ -1514,5 +1514,108 @@
     },
     "generated_date": "2026-03-22",
     "auto_generated": true
+  },
+  {
+    "id": "xpp_delete_from",
+    "title": "delete_from & Bulk Operations",
+    "section": "X++ Language",
+    "level": "Intermediate",
+    "duration": "12 min read",
+    "tags": [
+      "bulk-operations",
+      "performance",
+      "sql-optimization",
+      "delete-operations",
+      "set-based"
+    ],
+    "summary": "Master X++ delete_from statement for high-performance bulk delete operations with proper transaction handling and optimization techniques.",
+    "content": {
+      "overview": "The delete_from statement is X++'s set-based bulk delete operation that translates directly to SQL DELETE statements, bypassing record-by-record processing and database triggers. Unlike traditional while-select-delete patterns, delete_from operates on entire result sets in a single database roundtrip, making it essential for high-volume data maintenance operations.\n\nIn D365 F&O, delete_from is crucial for performance-critical scenarios like data archival, cleanup routines, and batch processing where thousands or millions of records need deletion. However, it bypasses the typical X++ record lifecycle (validateDelete, delete methods, alerts), requiring careful consideration of business logic and referential integrity.\n\nThis lesson covers production-grade delete_from patterns, transaction management, join operations, and performance optimization techniques used in enterprise D365 implementations.",
+      "theory": "The delete_from statement operates at the SQL layer, generating direct DELETE statements that bypass the Application Object Server (AOS) record buffer and table method execution. This makes it significantly faster than record-by-record deletion but requires understanding of its implications on D365's application framework.\n\nWhen executing delete_from, the kernel translates the X++ statement into optimized SQL, utilizing database indexes and query execution plans. The operation respects table inheritance hierarchies and automatically handles derived tables, but does not trigger validateDelete(), delete(), or aosValidateDelete() methods on table objects. Similarly, database triggers and alerts configured on tables are bypassed.\n\nIn the context of D365's transaction framework, delete_from operations should be wrapped in explicit ttsbegin/ttscommit blocks to ensure atomicity. The operation participates in the current transaction scope and can be rolled back with ttsabort. For large datasets, consider chunking operations to avoid long-running transactions that can cause blocking and timeout issues.\n\nThe statement supports complex WHERE clauses including subqueries, EXISTS conditions, and table joins through the JOIN syntax. However, join performance depends heavily on proper indexing and foreign key relationships defined in the AOT. The query optimizer uses statistics and execution plans similar to standard select statements, making index design crucial for optimal performance.",
+      "code_examples": [
+        {
+          "title": "Basic Bulk Delete with Transaction Management",
+          "description": "Demonstrates fundamental delete_from syntax with proper transaction handling and error management for removing old sales quotations",
+          "language": "xpp",
+          "code": "static void deleteSalesQuotationCleanup(Args _args)\n{\n    SalesQuotationTable salesQuotationTable;\n    date cutoffDate = today() - 365; // Delete quotations older than 1 year\n    int64 deletedRecords;\n    \n    try\n    {\n        ttsbegin;\n        \n        // Count records before deletion for logging\n        select count(RecId) from salesQuotationTable\n            where salesQuotationTable.CreatedDateTime < DateTimeUtil::newDateTime(cutoffDate, 0);\n        deletedRecords = salesQuotationTable.RecId;\n        \n        // Bulk delete using delete_from\n        delete_from salesQuotationTable\n            where salesQuotationTable.CreatedDateTime < DateTimeUtil::newDateTime(cutoffDate, 0)\n               && salesQuotationTable.QuotationStatus == SalesQuotationStatus::Lost;\n        \n        ttscommit;\n        \n        info(strFmt(\"Successfully deleted %1 old sales quotations\", deletedRecords));\n    }\n    catch (Exception::Error)\n    {\n        ttsabort;\n        error(\"Failed to delete sales quotations: \" + infolog.text());\n        throw Exception::Error;\n    }\n}"
+        },
+        {
+          "title": "Complex Join-Based Deletion",
+          "description": "Advanced delete_from with table joins to remove sales lines where the parent sales order meets specific criteria",
+          "language": "xpp",
+          "code": "static void deleteOrderLinesWithJoin(Args _args)\n{\n    SalesLine salesLine;\n    SalesTable salesTable;\n    InventTable inventTable;\n    \n    try\n    {\n        ttsbegin;\n        \n        // Delete sales lines for cancelled orders with discontinued items\n        delete_from salesLine\n            join salesTable\n                where salesTable.SalesId == salesLine.SalesId\n                   && salesTable.SalesStatus == SalesStatus::Canceled\n            join inventTable\n                where inventTable.ItemId == salesLine.ItemId\n                   && inventTable.ItemStatus == InventItemStatus::Discontinued;\n        \n        ttscommit;\n        \n        info(\"Deleted sales lines for cancelled orders with discontinued items\");\n    }\n    catch (Exception::UpdateConflict)\n    {\n        ttsabort;\n        warning(\"Update conflict detected - some records may have been modified by another user\");\n    }\n    catch (Exception::Error)\n    {\n        ttsabort;\n        error(\"Error during bulk delete operation: \" + infolog.text());\n    }\n}"
+        },
+        {
+          "title": "Chunked Deletion for Large Datasets",
+          "description": "Production pattern for deleting large volumes of data using chunking to avoid transaction log issues and deadlocks",
+          "language": "xpp",
+          "code": "public static void deleteLargeDatasetChunked(Args _args)\n{\n    TransDate fromDate = 01\\01\\2020;\n    TransDate toDate = 31\\12\\2020;\n    int chunkSize = 5000;\n    int totalDeleted = 0;\n    boolean moreRecords = true;\n    CustInvoiceJour custInvoiceJour;\n    \n    while (moreRecords)\n    {\n        try\n        {\n            ttsbegin;\n            \n            // Use TOP to limit the number of records processed\n            delete_from custInvoiceJour\n                where custInvoiceJour.InvoiceDate >= fromDate\n                   && custInvoiceJour.InvoiceDate <= toDate\n                   && custInvoiceJour.Posted == NoYes::Yes\n                   && (select top 1 RecId from CustInvoiceTrans\n                       where CustInvoiceTrans.InvoiceId == custInvoiceJour.InvoiceId\n                          && CustInvoiceTrans.InvoiceDate == custInvoiceJour.InvoiceDate) == 0; // No related transactions\n            \n            // Check if we deleted fewer records than chunk size\n            if (xSession::objectsDeleted() < chunkSize)\n            {\n                moreRecords = false;\n            }\n            \n            totalDeleted += xSession::objectsDeleted();\n            \n            ttscommit;\n            \n            // Yield execution to prevent blocking\n            if (totalDeleted % (chunkSize * 10) == 0)\n            {\n                info(strFmt(\"Processed %1 records so far...\", totalDeleted));\n                sleep(100); // Brief pause to allow other operations\n            }\n        }\n        catch (Exception::Deadlock)\n        {\n            ttsabort;\n            warning(\"Deadlock detected, retrying chunk...\");\n            sleep(1000);\n            // Continue to retry the same chunk\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(strFmt(\"Critical error during chunked deletion at record %1: %2\", \n                        totalDeleted, infolog.text()));\n            break;\n        }\n    }\n    \n    info(strFmt(\"Bulk deletion completed. Total records deleted: %1\", totalDeleted));\n}"
+        },
+        {
+          "title": "Conditional Deletion with EXISTS Subquery",
+          "description": "Using EXISTS subqueries in delete_from for complex conditional logic while maintaining performance",
+          "language": "xpp",
+          "code": "static void deleteOrphanedInventTransWithExists(Args _args)\n{\n    InventTrans inventTrans;\n    \n    try\n    {\n        ttsbegin;\n        \n        // Delete inventory transactions that have no corresponding sales or purchase references\n        delete_from inventTrans\n            where inventTrans.StatusIssue == StatusIssue::Sold\n               && inventTrans.TransDate < (today() - 90)\n               && !exists (select RecId from SalesLine\n                          where SalesLine.InventTransId == inventTrans.InventTransId)\n               && !exists (select RecId from PurchLine\n                          where PurchLine.InventTransId == inventTrans.InventTransId)\n               && !exists (select RecId from InventJournalTrans\n                          where InventJournalTrans.InventTransId == inventTrans.InventTransId);\n        \n        ttscommit;\n        \n        info(strFmt(\"Deleted %1 orphaned inventory transactions\", xSession::objectsDeleted()));\n    }\n    catch (Exception::Error)\n    {\n        ttsabort;\n        error(\"Failed to delete orphaned inventory transactions: \" + infolog.text());\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "delete_from bypasses table methods (validateDelete, delete) and database triggers, requiring careful consideration of business logic dependencies",
+        "Always wrap delete_from operations in explicit ttsbegin/ttscommit blocks to ensure proper transaction management and rollback capability",
+        "Use xSession::objectsDeleted() to retrieve the count of records affected by the last delete_from operation for logging and validation",
+        "JOIN syntax in delete_from supports complex multi-table deletion scenarios but requires proper foreign key relationships and indexing for optimal performance",
+        "For large datasets, implement chunking patterns to avoid transaction log issues, deadlocks, and timeout problems in production environments"
+      ],
+      "gotchas": [
+        "Forgetting that delete_from bypasses validateDelete() methods — always manually validate business rules before bulk deletion or implement validation in the WHERE clause",
+        "Using delete_from without proper transaction boundaries — omitting ttsbegin/ttscommit can lead to inconsistent data states and make error recovery impossible",
+        "Ignoring foreign key constraints — delete_from will fail with referential integrity errors if child records exist, unlike record.delete() which can cascade deletions through table relations"
+      ],
+      "performance_tips": [
+        "Ensure WHERE clause conditions are backed by appropriate database indexes — delete_from performance directly correlates with query plan efficiency and index usage",
+        "Consider using NOT EXISTS instead of NOT IN subqueries to avoid NULL handling issues and improve execution plan optimization in complex deletion scenarios"
+      ],
+      "related_topics": [
+        "xpp_select",
+        "xpp_tables",
+        "xpp_batch"
+      ],
+      "quiz": [
+        {
+          "q": "What happens to table method execution when using delete_from?",
+          "options": [
+            "Methods execute normally",
+            "Only validateDelete() is bypassed",
+            "All table methods are bypassed",
+            "Methods execute in batch mode"
+          ],
+          "answer": 2,
+          "explanation": "Why C is correct: delete_from operates at the SQL level and completely bypasses all X++ table methods including validateDelete(), delete(), and aosValidateDelete(). This is a key difference from record-by-record deletion and why validation must be handled explicitly in the WHERE clause or before the operation."
+        },
+        {
+          "q": "Which method returns the number of records affected by the last delete_from operation?",
+          "options": [
+            "xSession::objectsDeleted()",
+            "Global::recordsAffected()",
+            "infolog.linesDeleted()",
+            "Database::getDeleteCount()"
+          ],
+          "answer": 0,
+          "explanation": "Why A is correct: xSession::objectsDeleted() is the correct X++ method that returns the number of records affected by the most recent set-based operation (delete_from, update_recordset, or insert_recordset). This is essential for logging and validation in production deletion scenarios."
+        },
+        {
+          "q": "What is the recommended approach for deleting very large datasets with delete_from?",
+          "options": [
+            "Single transaction with timeout extension",
+            "Multiple small chunks with separate transactions",
+            "Disable transaction logging temporarily",
+            "Use async execution patterns"
+          ],
+          "answer": 1,
+          "explanation": "Why B is correct: Chunking large delete operations into smaller transactions prevents transaction log bloat, reduces deadlock potential, and allows for better system responsiveness. This pattern also enables progress tracking and graceful handling of errors without losing all work."
+        }
+      ]
+    },
+    "generated_date": "2026-03-23",
+    "auto_generated": true
   }
 ]
