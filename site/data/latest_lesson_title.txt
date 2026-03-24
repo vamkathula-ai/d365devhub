@@ -1,1 +1,1 @@
-delete_from & Bulk Operations
+Optimistic Concurrency & Retry Logic

@@ -1,5 +1,13 @@
 [
   {
+    "date": "Mar 24",
+    "tag": "LESSON",
+    "title": "Optimistic Concurrency & Retry Logic",
+    "section": "X++ Language",
+    "level": "Expert",
+    "id": "xpp_optimistic_concur"
+  },
+  {
     "date": "Mar 23",
     "tag": "LESSON",
     "title": "delete_from & Bulk Operations",
