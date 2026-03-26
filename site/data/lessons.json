@@ -1812,5 +1812,97 @@
     },
     "generated_date": "2026-03-25",
     "auto_generated": true
+  },
+  {
+    "id": "ext_form_datasource",
+    "title": "Form DataSource Extensions & Override",
+    "section": "Extensions",
+    "level": "Intermediate",
+    "duration": "15 min read",
+    "tags": [
+      "forms",
+      "extensions",
+      "datasource",
+      "coc",
+      "event-handlers"
+    ],
+    "summary": "Master form datasource extensions using Chain of Command and event handlers to customize form behavior without overlayering in D365 F&O.",
+    "content": {
+      "overview": "Form datasource extensions allow you to modify form behavior through Chain of Command (CoC) and event handlers without creating overlays. This is the modern, upgrade-safe approach to form customization in D365 F&O. You can intercept datasource methods like init(), executeQuery(), validateWrite(), and create() to implement business logic while maintaining the original form's functionality. Understanding form datasource architecture is crucial because forms are the primary user interface in D365 F&O, and datasource methods control data retrieval, validation, and persistence. Unlike classic overlayering, extensions ensure your customizations survive application updates and reduce technical debt.",
+      "theory": "Form datasources in D365 F&O inherit from FormDataSource class and provide the bridge between form controls and underlying table data. Each datasource represents a table or view and exposes methods for data lifecycle management. The FormRun framework orchestrates datasource interactions through a well-defined method execution order: init() → executeQuery() → active() → validateWrite() → write() → written(). Chain of Command allows you to wrap these methods with [ExtensionOf(formStr(FormName))] and [FormDataSourceEventHandler(formDataSourceStr(FormName, DataSourceName), FormDataSourceEventType::EventName)] decorators. The kernel maintains a call stack that preserves the original method execution while injecting your custom logic. Event handlers provide pre/post hooks without method wrapping, offering cleaner separation of concerns. The SysExtension framework manages extension discovery and execution order through metadata attributes.",
+      "code_examples": [
+        {
+          "title": "Chain of Command on Form DataSource Methods",
+          "description": "Demonstrates extending CustTable form datasource to add custom validation and default values using CoC pattern",
+          "language": "xpp",
+          "code": "[ExtensionOf(formStr(CustTable))]\nfinal class CustTableForm_Extension\n{\n    /// <summary>\n    /// Override init method to set default values\n    /// </summary>\n    public void init()\n    {\n        // Call original init first\n        next init();\n        \n        FormDataSource custTableDS = this.dataSource(formDataSourceStr(CustTable, CustTable));\n        if (custTableDS)\n        {\n            CustTable custTable = custTableDS.cursor();\n            \n            // Set default customer group for new records\n            if (custTable.RecId == 0)\n            {\n                custTable.CustGroup = \"10\"; // Default group\n                custTable.PaymTermId = \"Net30\";\n                info(\"Default values applied to new customer record\");\n            }\n        }\n    }\n    \n    /// <summary>\n    /// Override validateWrite to add custom business logic\n    /// </summary>\n    public boolean validateWrite(FormDataSource _dataSource)\n    {\n        boolean ret = next validateWrite(_dataSource);\n        \n        if (ret && _dataSource.name() == formDataSourceStr(CustTable, CustTable))\n        {\n            CustTable custTable = _dataSource.cursor();\n            \n            // Custom validation: prevent duplicate names in same group\n            CustTable existingCust;\n            select firstonly RecId from existingCust\n                where existingCust.Name == custTable.Name\n                   && existingCust.CustGroup == custTable.CustGroup\n                   && existingCust.RecId != custTable.RecId;\n                   \n            if (existingCust.RecId)\n            {\n                ret = checkFailed(\"Customer name already exists in this group\");\n            }\n            \n            // Validate credit limit based on customer group\n            if (ret && custTable.CreditMax > 50000 && custTable.CustGroup == \"20\")\n            {\n                ret = Box::yesNo(\"Credit limit exceeds recommendation. Continue?\", DialogButton::No) == DialogButton::Yes;\n            }\n        }\n        \n        return ret;\n    }\n    \n    /// <summary>\n    /// Override create method to handle special logic for new records\n    /// </summary>\n    public Common create(boolean _append = false)\n    {\n        FormDataSource custTableDS = this.dataSource(formDataSourceStr(CustTable, CustTable));\n        Common ret = next create(_append);\n        \n        if (ret && custTableDS)\n        {\n            CustTable custTable = ret;\n            \n            // Auto-generate customer account based on name\n            if (!custTable.AccountNum)\n            {\n                str namePrefix = subStr(custTable.Name, 1, 3);\n                NumberSeq numberSeq = NumberSeq::newGetNum(CustParameters::numRefCustomerAccount());\n                custTable.AccountNum = namePrefix + \"-\" + numberSeq.num();\n                numberSeq.used();\n                \n                info(strFmt(\"Auto-generated customer account: %1\", custTable.AccountNum));\n            }\n        }\n        \n        return ret;\n    }\n}"
+        },
+        {
+          "title": "Event Handler Approach for Form DataSource Events",
+          "description": "Alternative approach using event handlers for cleaner separation and multiple extensions support",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Event handler class for CustTable form datasource events\n/// </summary>\nclass CustTableFormEventHandlers\n{\n    /// <summary>\n    /// Pre-event handler for executeQuery - modify query before execution\n    /// </summary>\n    [FormDataSourceEventHandler(formDataSourceStr(CustTable, CustTable), FormDataSourceEventType::QueryExecuting)]\n    public static void CustTable_OnQueryExecuting(FormDataSource sender, FormDataSourceEventArgs e)\n    {\n        FormDataSourceQueryExecutingEventArgs queryArgs = e as FormDataSourceQueryExecutingEventArgs;\n        Query query = queryArgs.query();\n        \n        // Add custom filter based on user preferences\n        UserInfo userInfo = UserInfo::find();\n        if (userInfo.DefaultCompany)\n        {\n            QueryBuildDataSource qbds = query.dataSourceTable(tableNum(CustTable));\n            if (qbds)\n            {\n                QueryBuildRange qbr = qbds.findRange(fieldNum(CustTable, DataAreaId));\n                if (!qbr)\n                {\n                    qbr = qbds.addRange(fieldNum(CustTable, DataAreaId));\n                }\n                qbr.value(queryValue(userInfo.DefaultCompany));\n            }\n        }\n    }\n    \n    /// <summary>\n    /// Post-event handler for record activation\n    /// </summary>\n    [FormDataSourceEventHandler(formDataSourceStr(CustTable, CustTable), FormDataSourceEventType::Activated)]\n    public static void CustTable_OnActivated(FormDataSource sender, FormDataSourceEventArgs e)\n    {\n        FormDataSource custTableDS = sender;\n        CustTable custTable = custTableDS.cursor();\n        FormRun formRun = custTableDS.formRun();\n        \n        if (custTable.RecId)\n        {\n            // Update form caption with customer info\n            str formCaption = strFmt(\"%1 - %2 (%3)\", \n                                   formRun.caption(),\n                                   custTable.AccountNum,\n                                   custTable.Name);\n            formRun.caption(formCaption);\n            \n            // Enable/disable controls based on customer status\n            FormControl creditLimitControl = formRun.controlCallingMethod(formControlStr(CustTable, CustTable_CreditMax));\n            if (creditLimitControl)\n            {\n                creditLimitControl.enabled(custTable.Blocked == CustVendorBlocked::No);\n            }\n            \n            // Refresh related data\n            FormDataSource custTransDS = formRun.dataSource(formDataSourceStr(CustTable, CustTrans));\n            if (custTransDS)\n            {\n                custTransDS.executeQuery();\n            }\n        }\n    }\n    \n    /// <summary>\n    /// Event handler for write operation\n    /// </summary>\n    [FormDataSourceEventHandler(formDataSourceStr(CustTable, CustTable), FormDataSourceEventType::Written)]\n    public static void CustTable_OnWritten(FormDataSource sender, FormDataSourceEventArgs e)\n    {\n        FormDataSourceWrittenEventArgs writtenArgs = e as FormDataSourceWrittenEventArgs;\n        CustTable custTable = sender.cursor();\n        \n        try\n        {\n            ttsbegin;\n            \n            // Create default customer transactions setup\n            if (writtenArgs.isCreate())\n            {\n                CustParameters custParameters = CustParameters::find();\n                \n                // Create default payment terms if not specified\n                if (!custTable.PaymTermId && custParameters.PaymTermId)\n                {\n                    custTable.PaymTermId = custParameters.PaymTermId;\n                    custTable.doUpdate();\n                }\n                \n                // Log customer creation for audit\n                EventInbox::add(custTable.TableId, \n                               custTable.RecId,\n                               \"Customer created\",\n                               strFmt(\"New customer %1 created by %2\", \n                                      custTable.AccountNum, \n                                      curUserId()),\n                               EventTypeId::Information);\n            }\n            \n            ttscommit;\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(\"Failed to complete post-write processing\");\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Use Chain of Command for method overrides and event handlers for pre/post hooks — CoC wraps methods while events provide cleaner separation",
+        "Always call next() in CoC methods to preserve original functionality — this maintains the method chain and prevents breaking existing logic",
+        "FormDataSource cursor() returns the current record buffer — use this to access and modify field values in your extensions",
+        "Event handlers are static methods with specific decorators — they don't require form inheritance and support multiple extensions",
+        "Validate business logic in validateWrite() and set defaults in init() or create() methods — follow the form lifecycle pattern for predictable behavior"
+      ],
+      "gotchas": [
+        "Don't forget to check RecId == 0 for new records — existing records have positive RecId values, new unsaved records have zero",
+        "Event handler method signatures must match exactly — incorrect parameters will cause runtime errors and events won't fire",
+        "FormDataSource methods execute in specific order — understanding init() → executeQuery() → active() → validateWrite() → write() → written() prevents logic conflicts"
+      ],
+      "performance_tips": [
+        "Cache FormDataSource references in init() rather than calling dataSource() repeatedly — reduces lookup overhead in frequently called methods",
+        "Use select firstonly with specific fields in validation logic — avoid full table scans when checking business rules in validateWrite()"
+      ],
+      "related_topics": [
+        "xpp_coc",
+        "xpp_delegates",
+        "forms_controls",
+        "forms_lifecycle"
+      ],
+      "quiz": [
+        {
+          "q": "Which method should you override to set default values for new form records?",
+          "options": [
+            "validateWrite()",
+            "init()",
+            "executeQuery()",
+            "active()"
+          ],
+          "answer": 1,
+          "explanation": "init() is called during form initialization and is the appropriate place to set default values for new records. You can check if RecId == 0 to identify new records."
+        },
+        {
+          "q": "What's the key difference between Chain of Command and Event Handlers for form extensions?",
+          "options": [
+            "CoC is faster than event handlers",
+            "Event handlers wrap methods, CoC provides hooks",
+            "CoC wraps methods, event handlers provide pre/post hooks",
+            "There's no functional difference"
+          ],
+          "answer": 2,
+          "explanation": "CoC wraps methods and requires calling next() to preserve functionality, while event handlers provide pre/post hooks without wrapping. Event handlers offer cleaner separation and better support for multiple extensions."
+        },
+        {
+          "q": "When extending validateWrite() with CoC, what must you do to maintain form functionality?",
+          "options": [
+            "Return true always",
+            "Call next validateWrite() and use its return value",
+            "Call ttsbegin/ttscommit",
+            "Override write() method also"
+          ],
+          "answer": 1,
+          "explanation": "You must call next validateWrite() to execute the original validation logic and use its return value in your logic. This preserves the original form's validation while adding your custom checks."
+        }
+      ]
+    },
+    "generated_date": "2026-03-26",
+    "auto_generated": true
   }
 ]

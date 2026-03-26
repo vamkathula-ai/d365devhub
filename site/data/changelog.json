@@ -1,5 +1,13 @@
 [
   {
+    "date": "Mar 26",
+    "tag": "LESSON",
+    "title": "Form DataSource Extensions & Override",
+    "section": "Extensions",
+    "level": "Intermediate",
+    "id": "ext_form_datasource"
+  },
+  {
     "date": "Mar 25",
     "tag": "LESSON",
     "title": "Table Extensions: Add Fields & Indexes",
