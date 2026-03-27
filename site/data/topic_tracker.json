@@ -1,5 +1,5 @@
 {
-  "last_index": 17,
+  "last_index": 18,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -30,9 +30,10 @@
     "xpp_delete_from",
     "xpp_optimistic_concur",
     "ext_table_extension",
-    "ext_form_datasource"
+    "ext_form_datasource",
+    "ext_menu_items"
   ],
-  "last_run": "2026-03-26",
-  "last_title": "Form DataSource Extensions & Override",
+  "last_run": "2026-03-27",
+  "last_title": "Menu Items, Menus & Action Pane Extensions",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
