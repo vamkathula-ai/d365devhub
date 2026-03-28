@@ -1,5 +1,13 @@
 [
   {
+    "date": "Mar 28",
+    "tag": "LESSON",
+    "title": "Enum Extensions: Add Values Safely",
+    "section": "Extensions",
+    "level": "Beginner",
+    "id": "ext_enum_extension"
+  },
+  {
     "date": "Mar 27",
     "tag": "LESSON",
     "title": "Menu Items, Menus & Action Pane Extensions",

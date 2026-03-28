@@ -1,1 +1,1 @@
-Menu Items, Menus & Action Pane Extensions
+Enum Extensions: Add Values Safely

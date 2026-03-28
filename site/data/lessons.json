@@ -2000,5 +2000,95 @@
     },
     "generated_date": "2026-03-27",
     "auto_generated": true
+  },
+  {
+    "id": "ext_enum_extension",
+    "title": "Enum Extensions: Add Values Safely",
+    "section": "Extensions",
+    "level": "Beginner",
+    "duration": "12 min read",
+    "tags": [
+      "extensions",
+      "enums",
+      "AOT",
+      "extensibility"
+    ],
+    "summary": "Learn how to extend Base Application enums with new values using extension models while maintaining compatibility and following Microsoft's extensibility patterns.",
+    "content": {
+      "overview": "Enum extensions are a cornerstone of the D365 F&O extensibility framework, allowing ISVs and customers to add new values to existing Base Application enums without overlayering. This capability is essential when you need to extend business logic with new status values, types, or classifications while preserving upgrade compatibility. Unlike the old overlayering model, enum extensions create a clean separation between your customizations and Microsoft's base code, ensuring your changes survive platform updates. Understanding enum extensions is crucial for any D365 developer working on customer implementations or building AppSource solutions.",
+      "theory": "Enum extensions in D365 F&O leverage the Application Object Tree (AOT) extension framework to dynamically add new values to existing enums at runtime. When you create an enum extension, the kernel merges the extension values with the base enum during compilation, creating a unified enum that includes both original and extended values. The extension mechanism uses metadata composition patterns where the SysModelElement framework tracks dependencies and ensures proper loading order. Under the hood, the enum extension creates additional entries in the EnumValue table with incremental EnumItemValue integers that don't conflict with base values. This approach maintains referential integrity while allowing the FormDataSource and TableBuffer classes to seamlessly work with extended enum values. The compilation process generates IL code that treats extended enum values identically to base enum values, ensuring no runtime performance penalty. The X++ compiler automatically handles the value resolution through the Global::enumStr() and Global::enumNum() intrinsic functions, making extended enum values indistinguishable from base values in business logic code.",
+      "code_examples": [
+        {
+          "title": "Creating a Simple Enum Extension",
+          "description": "Demonstrates how to extend the CustGroupType enum with custom customer segmentation values",
+          "language": "xpp",
+          "code": "// In your extension project: CustGroupType.Extension\n// This extends the base CustGroupType enum with new values\n\n// The enum extension is created in AOT, then used in code like this:\nstatic void demonstrateEnumExtensionUsage(Args _args)\n{\n    CustGroupType custGroupType;\n    CustTable custTable;\n    \n    ttsbegin;\n    \n    try\n    {\n        // Using extended enum values just like base values\n        custGroupType = CustGroupType::Premium;  // Assuming Premium is your extension value\n        \n        select firstonly custTable\n            where custTable.CustGroup == 'PREMIUM'\n            && custTable.Blocked == CustVendorBlocked::No;\n            \n        if (custTable.RecId)\n        {\n            // Business logic using extended enum value\n            switch (custGroupType)\n            {\n                case CustGroupType::Premium:\n                    info(strFmt(\"Processing premium customer %1\", custTable.AccountNum));\n                    break;\n                    \n                case CustGroupType::VIP:  // Another extension value\n                    info(strFmt(\"Processing VIP customer %1\", custTable.AccountNum));\n                    break;\n                    \n                default:\n                    info(strFmt(\"Processing standard customer %1\", custTable.AccountNum));\n                    break;\n            }\n        }\n        \n        ttscommit;\n    }\n    catch (Exception::Error)\n    {\n        ttsabort;\n        error(\"Failed to process customer group type extension\");\n    }\n}"
+        },
+        {
+          "title": "Advanced Enum Extension with Validation",
+          "description": "Shows how to extend SalesStatus with custom validation logic and proper error handling",
+          "language": "xpp",
+          "code": "// Extending SalesStatus enum with custom manufacturing states\n\nclass SalesTableExtension\n{\n    [ExtensionOf(classStr(SalesTable))]\n    public static class SalesTable_Extension\n    {\n        // Method to validate extended enum values\n        public boolean validateExtendedSalesStatus()\n        {\n            boolean ret = true;\n            SalesTable salesTable = this as SalesTable;\n            \n            try\n            {\n                switch (salesTable.SalesStatus)\n                {\n                    case SalesStatus::InManufacturing:  // Extended value\n                        ret = this.validateManufacturingStatus();\n                        break;\n                        \n                    case SalesStatus::QualityHold:     // Extended value\n                        ret = this.validateQualityHoldStatus();\n                        break;\n                        \n                    default:\n                        // Let base validation handle standard enum values\n                        ret = next validateExtendedSalesStatus();\n                        break;\n                }\n            }\n            catch (Exception::Error)\n            {\n                error(strFmt(\"Validation failed for sales order %1 with status %2\", \n                           salesTable.SalesId, \n                           enum2Str(salesTable.SalesStatus)));\n                ret = false;\n            }\n            \n            return ret;\n        }\n        \n        private boolean validateManufacturingStatus()\n        {\n            SalesTable salesTable = this as SalesTable;\n            InventTable inventTable;\n            boolean hasManufacturedItems = false;\n            \n            // Check if order contains manufactured items\n            select firstonly inventTable\n                exists join salesLine\n                where salesLine.SalesId == salesTable.SalesId\n                && salesLine.ItemId == inventTable.ItemId\n                && inventTable.ItemType == ItemType::BOM;\n                \n            hasManufacturedItems = inventTable.RecId != 0;\n            \n            if (!hasManufacturedItems)\n            {\n                error(\"Cannot set InManufacturing status on orders without manufactured items\");\n                return false;\n            }\n            \n            return true;\n        }\n        \n        private boolean validateQualityHoldStatus()\n        {\n            // Custom validation for quality hold status\n            return true; // Simplified for example\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Enum extensions create new values without overlayering — they're compiled into the base enum at runtime through metadata composition",
+        "Extended enum values are assigned automatic integer values that don't conflict with base enum values — the system manages value assignment",
+        "Use Global::enumStr() and Global::enumNum() functions with extended enum values just like base values — no special handling required",
+        "Extension enum values participate fully in switch statements, database queries, and form controls without additional configuration",
+        "Create enum extensions in your extension model — never modify the base enum directly to maintain upgrade compatibility"
+      ],
+      "gotchas": [
+        "Don't hardcode integer values for extended enum entries — let the system auto-assign values to prevent conflicts during platform updates",
+        "Extended enum values don't automatically appear in existing form controls — you must extend the form's enum data source or add explicit enum values to combo boxes",
+        "Avoid using enum2int() comparisons with extended enum values in upgrade scripts — enum integer values can change between platform versions"
+      ],
+      "performance_tips": [
+        "Enum extensions have zero runtime performance impact — they're resolved at compile time into the same IL code as base enum values",
+        "Cache enum string conversions when performing bulk operations — use a Map container to store enum2Str() results rather than repeatedly calling the conversion"
+      ],
+      "related_topics": [
+        "xpp_types",
+        "ext_table_extension",
+        "ext_form_extension"
+      ],
+      "quiz": [
+        {
+          "q": "What happens to enum extension values during D365 F&O compilation?",
+          "options": [
+            "They remain separate from the base enum",
+            "They're merged with the base enum into a unified runtime enum",
+            "They override base enum values with the same name",
+            "They create a new enum that inherits from the base enum"
+          ],
+          "answer": 1,
+          "explanation": "Why B is correct: During compilation, the metadata framework merges extension enum values with the base enum, creating a single unified enum that contains both base and extended values, making them indistinguishable at runtime."
+        },
+        {
+          "q": "How should you handle integer value assignment for extended enum values?",
+          "options": [
+            "Let the system auto-assign values to avoid conflicts",
+            "Use negative integers to distinguish from base values",
+            "Start from 1000 to leave room for Microsoft additions",
+            "Use the same values as similar base enum entries"
+          ],
+          "answer": 0,
+          "explanation": "Why A is correct: The D365 extension framework automatically assigns safe integer values to extended enum entries, ensuring no conflicts with current or future base enum values during platform updates."
+        },
+        {
+          "q": "Which approach is correct for using extended enum values in switch statements?",
+          "options": [
+            "Use enum2Int() to convert to integers first",
+            "Cast extended values to the base enum type",
+            "Use extended enum values directly like base enum values",
+            "Check if the value is extended before using it"
+          ],
+          "answer": 2,
+          "explanation": "Why C is correct: Extended enum values are compiled into the base enum and can be used directly in switch statements, database queries, and all other contexts without special handling or type conversion."
+        }
+      ]
+    },
+    "generated_date": "2026-03-28",
+    "auto_generated": true
   }
 ]
