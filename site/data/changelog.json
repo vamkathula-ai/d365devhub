@@ -1,5 +1,13 @@
 [
   {
+    "date": "Mar 30",
+    "tag": "LESSON",
+    "title": "SSRS Report Extensions & DP Override",
+    "section": "Extensions",
+    "level": "Expert",
+    "id": "ext_ssrs_extension"
+  },
+  {
     "date": "Mar 29",
     "tag": "LESSON",
     "title": "Query Extensions & Data Range Filters",
