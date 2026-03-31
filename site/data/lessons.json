@@ -2284,5 +2284,97 @@
     },
     "generated_date": "2026-03-30",
     "auto_generated": true
+  },
+  {
+    "id": "ext_lookup_override",
+    "title": "Custom Lookups via FormControl Extensions",
+    "section": "Extensions",
+    "level": "Intermediate",
+    "duration": "12 min read",
+    "tags": [
+      "extensions",
+      "lookups",
+      "formcontrols",
+      "coc",
+      "ui"
+    ],
+    "summary": "Learn to override standard lookups in D365 F&O using Chain of Command extensions to provide custom filtering, multi-field lookups, and enhanced user experience without modifying base objects.",
+    "content": {
+      "overview": "Custom lookups are essential for tailoring D365 F&O user experience to specific business requirements. While standard reference field lookups work for basic scenarios, real-world implementations often require filtered data sets, multi-field searches, or context-aware results. The traditional approach of overlayering form controls is no longer viable in cloud deployments.\n\nD365 F&O's extension framework provides Chain of Command (CoC) capabilities to override lookup methods on form controls without touching base code. This approach maintains upgradeability while allowing deep customization of lookup behavior, including SysTableLookup modifications, custom query building, and dynamic filtering based on form context.\n\nUnderstanding lookup extension patterns is crucial for intermediate developers because lookups are ubiquitous in ERP systems, and poorly implemented custom lookups can severely impact user productivity and system performance. The extension model requires careful consideration of method signatures, event handling, and form control lifecycle management.",
+      "theory": "Form control lookups in D365 F&O are primarily handled through the lookup() method on FormStringControl, FormReferenceControl, and FormComboBoxControl classes. These methods are called by the kernel when users invoke the dropdown via F4 key or mouse click. The standard lookup behavior queries related tables based on EDT relations and displays results in a SysTableLookup form.\n\nThe extension framework allows CoC on form control methods by targeting specific form.control combinations. The critical aspect is understanding that form controls inherit from FormControl base class, which provides the lookup() method signature. Custom implementations typically involve building a Query object, applying filters, and either using SysTableLookup.parmQuery() for standard lookup UI or implementing completely custom lookup forms.\n\nKey architectural considerations include form datasource synchronization, selected value handling via FormControl.text() property, and proper cleanup of temporary objects. The lookup method receives no parameters but has access to the form's datasource context through this.formRun().dataSource() methods. Performance optimization requires careful query construction and appropriate use of indexes, especially when filtering large datasets based on form context.",
+      "code_examples": [
+        {
+          "title": "Basic Lookup Override with Filtering",
+          "description": "Override the standard Customer lookup to show only customers from a specific customer group based on current form context",
+          "language": "xpp",
+          "code": "[ExtensionOf(formControlStr(SalesTable, CustAccount))]\nfinal class SalesTable_CustAccount_Extension\n{\n    public void lookup()\n    {\n        SysTableLookup      sysTableLookup;\n        Query               query;\n        QueryBuildDataSource qbds;\n        QueryBuildRange     qbr;\n        SalesTable          salesTable;\n        FormRun             formRun;\n\n        formRun = this.formRun();\n        salesTable = formRun.dataSource(formDataSourceStr(SalesTable, SalesTable)).cursor();\n\n        // Only show customers from specific group if order type is 'Journal'\n        if (salesTable.SalesType == SalesType::Journal)\n        {\n            query = new Query();\n            qbds = query.addDataSource(tableNum(CustTable));\n            qbds.addRange(fieldNum(CustTable, CustGroup)).value('DOMESTIC');\n            qbds.addSortField(fieldNum(CustTable, AccountNum));\n            \n            sysTableLookup = SysTableLookup::newParameters(tableNum(CustTable), this);\n            sysTableLookup.addLookupfield(fieldNum(CustTable, AccountNum));\n            sysTableLookup.addLookupfield(fieldNum(CustTable, Name));\n            sysTableLookup.addLookupfield(fieldNum(CustTable, CustGroup));\n            sysTableLookup.parmQuery(query);\n            sysTableLookup.performFormLookup();\n        }\n        else\n        {\n            // Call standard lookup for other sales types\n            super();\n        }\n    }\n}"
+        },
+        {
+          "title": "Advanced Multi-Table Lookup with Custom Form",
+          "description": "Create a sophisticated lookup combining data from multiple tables with custom UI, including proper cleanup and error handling",
+          "language": "xpp",
+          "code": "[ExtensionOf(formControlStr(PurchTable, DefaultDimension))]\nfinal class PurchTable_DefaultDimension_Extension\n{\n    public void lookup()\n    {\n        FormRun                     lookupForm;\n        Args                        args;\n        DimensionStorage            dimStorage;\n        PurchTable                  purchTable;\n        VendTable                   vendTable;\n        DimensionAttributeValueSet  dimValueSet;\n        \n        try\n        {\n            purchTable = this.formRun().dataSource(formDataSourceStr(PurchTable, PurchTable)).cursor();\n            \n            if (!purchTable.VendAccount)\n            {\n                info(\"Please select a vendor first.\");\n                return;\n            }\n\n            vendTable = VendTable::find(purchTable.VendAccount);\n            \n            // Create custom lookup args\n            args = new Args();\n            args.caller(this);\n            args.lookupField(fieldNum(PurchTable, DefaultDimension));\n            args.parmObject(vendTable); // Pass vendor context\n            \n            // Open custom dimension lookup form\n            lookupForm = classfactory.formRunClass(args);\n            lookupForm.init();\n            \n            if (lookupForm)\n            {\n                // Set up form with vendor-specific dimension defaults\n                this.setupDimensionLookup(lookupForm, vendTable.DefaultDimension);\n                lookupForm.run();\n                lookupForm.detach();\n            }\n        }\n        catch (Exception::Error)\n        {\n            error(\"Failed to open dimension lookup: \" + AifUtil::getClrErrorMessage());\n            // Fallback to standard lookup\n            super();\n        }\n    }\n    \n    private void setupDimensionLookup(FormRun _lookupForm, DimensionDefault _vendorDefault)\n    {\n        DimensionStorage    dimStorage;\n        \n        if (_vendorDefault)\n        {\n            dimStorage = DimensionStorage::find(_vendorDefault);\n            // Pass vendor's default dimensions as lookup filter\n            _lookupForm.parmObject(dimStorage);\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Extension syntax targets specific form.control combinations using formControlStr() macro — changes affect only that specific control instance",
+        "Always call super() as fallback when custom logic doesn't apply — maintains standard behavior for edge cases and ensures system stability",
+        "SysTableLookup.performFormLookup() handles standard lookup UI — use addLookupfield() to control which fields display in the lookup grid",
+        "Access form datasource context via this.formRun().dataSource() — enables dynamic filtering based on current record values and form state",
+        "Query construction with proper ranges and sorting is critical — use QueryBuildRange.value() and addSortField() for optimal user experience"
+      ],
+      "gotchas": [
+        "Forgetting to handle null/empty datasource values — always validate form context before building lookup queries or you'll get runtime errors in create-mode",
+        "Not calling super() for fallback scenarios — if your custom logic fails or doesn't apply, the lookup becomes completely broken without the base implementation",
+        "Memory leaks from Query and SysTableLookup objects — these are managed objects that require proper disposal, though GC typically handles cleanup automatically"
+      ],
+      "performance_tips": [
+        "Use Query.addDataSource() instead of select statements in lookups — the query object integrates better with SysTableLookup and leverages kernel optimizations",
+        "Apply restrictive ranges early in QueryBuildDataSource — filter large tables before joins to minimize dataset size and improve response time"
+      ],
+      "related_topics": [
+        "xpp_coc",
+        "xpp_select",
+        "form_extensions",
+        "ui_patterns"
+      ],
+      "quiz": [
+        {
+          "q": "What is the correct extension attribute syntax to override a lookup method on a specific form control?",
+          "options": [
+            "[ExtensionOf(formStr(SalesTable))]",
+            "[ExtensionOf(formControlStr(SalesTable, CustAccount))]",
+            "[ExtensionOf(controlStr(SalesTable.CustAccount))]",
+            "[ExtensionOf(formDataSourceStr(SalesTable, SalesTable))]"
+          ],
+          "answer": 1,
+          "explanation": "The formControlStr() macro is specifically designed to target individual form controls for extension. It takes the form name and control name as parameters, allowing precise targeting of the lookup method on that specific control instance."
+        },
+        {
+          "q": "Which method should you always include in custom lookup implementations as a safety fallback?",
+          "options": [
+            "this.performLookup()",
+            "super()",
+            "SysTableLookup.close()",
+            "this.validate()"
+          ],
+          "answer": 1,
+          "explanation": "Calling super() ensures that if your custom lookup logic fails or doesn't apply to the current context, the standard lookup behavior is preserved. This maintains system functionality and prevents broken lookups."
+        },
+        {
+          "q": "How do you access the current record from a form datasource within a form control extension?",
+          "options": [
+            "this.dataSource().cursor()",
+            "this.formRun().activeRecord()",
+            "this.formRun().dataSource(formDataSourceStr(TableName, DataSourceName)).cursor()",
+            "FormRun.currentRecord()"
+          ],
+          "answer": 2,
+          "explanation": "The formRun().dataSource() method with formDataSourceStr() macro provides type-safe access to specific datasources, and cursor() returns the current record buffer. This is the standard pattern for accessing form context in extensions."
+        }
+      ]
+    },
+    "generated_date": "2026-03-31",
+    "auto_generated": true
   }
 ]

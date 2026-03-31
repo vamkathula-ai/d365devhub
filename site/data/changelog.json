@@ -1,5 +1,13 @@
 [
   {
+    "date": "Mar 31",
+    "tag": "LESSON",
+    "title": "Custom Lookups via FormControl Extensions",
+    "section": "Extensions",
+    "level": "Intermediate",
+    "id": "ext_lookup_override"
+  },
+  {
     "date": "Mar 30",
     "tag": "LESSON",
     "title": "SSRS Report Extensions & DP Override",
