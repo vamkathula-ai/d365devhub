@@ -1,5 +1,5 @@
 {
-  "last_index": 22,
+  "last_index": 23,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -35,9 +35,10 @@
     "ext_enum_extension",
     "ext_query_extension",
     "ext_ssrs_extension",
-    "ext_lookup_override"
+    "ext_lookup_override",
+    "ext_business_event"
   ],
-  "last_run": "2026-03-31",
-  "last_title": "Custom Lookups via FormControl Extensions",
+  "last_run": "2026-04-01",
+  "last_title": "Business Events: Custom & OOB",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

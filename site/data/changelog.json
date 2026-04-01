@@ -1,5 +1,13 @@
 [
   {
+    "date": "Apr 01",
+    "tag": "LESSON",
+    "title": "Business Events: Custom & OOB",
+    "section": "Extensions",
+    "level": "Expert",
+    "id": "ext_business_event"
+  },
+  {
     "date": "Mar 31",
     "tag": "LESSON",
     "title": "Custom Lookups via FormControl Extensions",

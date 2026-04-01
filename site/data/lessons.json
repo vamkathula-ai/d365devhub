@@ -2376,5 +2376,108 @@
     },
     "generated_date": "2026-03-31",
     "auto_generated": true
+  },
+  {
+    "id": "ext_business_event",
+    "title": "Business Events: Custom & OOB",
+    "section": "Extensions",
+    "level": "Expert",
+    "duration": "18 min read",
+    "tags": [
+      "business-events",
+      "integration",
+      "messaging",
+      "event-driven",
+      "azure-service-bus"
+    ],
+    "summary": "Master D365 F&O Business Events framework for real-time integration, including creating custom events, extending OOB events, and implementing reliable messaging patterns.",
+    "content": {
+      "overview": "Business Events in D365 F&O provide a powerful event-driven integration mechanism that enables real-time data synchronization and process automation with external systems. Unlike traditional batch-based integrations, Business Events fire immediately when specific business operations occur, allowing downstream systems to react instantly to changes in customer orders, invoices, inventory transactions, or custom business processes. The framework leverages Azure Service Bus, Event Grid, or HTTP endpoints to deliver structured JSON payloads containing business context and metadata. Understanding both out-of-the-box events and custom event creation is crucial for building robust, scalable integration architectures that support modern digital transformation initiatives.",
+      "theory": "The Business Events framework is built on the BusinessEventBase abstract class hierarchy, with concrete implementations inheriting from BusinessEvent or BusinessEventContract classes. The framework operates through a publisher-subscriber pattern where BusinessEventProcessor handles event registration, BusinessEventManager coordinates event firing, and BusinessEventEndpoint manages destination routing. OOB events are pre-defined in the BusinessEventsCatalog and automatically fired by framework hooks in standard business processes (SalesOrderConfirmed, PurchaseOrderApproved, etc.). Custom events require explicit firing through BusinessEventManager::fireEvent() calls at appropriate points in your business logic. The event payload structure follows the CloudEvents specification v1.0, containing standardized headers (eventType, subject, dataVersion) plus a business-specific data section. Event reliability is ensured through Azure Service Bus dead-letter queues, retry policies, and audit logging via BusinessEventsLog table. The framework integrates with D365's standard security model, requiring BusinessEventsAdministrator role for configuration and respecting data security policies for payload content filtering.",
+      "code_examples": [
+        {
+          "title": "Custom Business Event Implementation",
+          "description": "Complete custom business event with contract, event class, and firing logic for customer credit limit changes",
+          "language": "xpp",
+          "code": "// Contract class defining the event payload structure\n[DataContract]\nfinal class CustomerCreditLimitChangedContract extends BusinessEventContract\n{\n    private CustAccount custAccount;\n    private AmountCur oldCreditMax;\n    private AmountCur newCreditMax;\n    private UserId changedBy;\n    private TransDateTime changedDateTime;\n\n    [DataMember('CustomerAccount')]\n    public CustAccount parmCustAccount(CustAccount _custAccount = custAccount)\n    {\n        custAccount = _custAccount;\n        return custAccount;\n    }\n\n    [DataMember('OldCreditLimit')]\n    public AmountCur parmOldCreditMax(AmountCur _oldCreditMax = oldCreditMax)\n    {\n        oldCreditMax = _oldCreditMax;\n        return oldCreditMax;\n    }\n\n    [DataMember('NewCreditLimit')]\n    public AmountCur parmNewCreditMax(AmountCur _newCreditMax = newCreditMax)\n    {\n        newCreditMax = _newCreditMax;\n        return newCreditMax;\n    }\n\n    [DataMember('ChangedBy')]\n    public UserId parmChangedBy(UserId _changedBy = changedBy)\n    {\n        changedBy = _changedBy;\n        return changedBy;\n    }\n\n    [DataMember('ChangedDateTime')]\n    public TransDateTime parmChangedDateTime(TransDateTime _changedDateTime = changedDateTime)\n    {\n        changedDateTime = _changedDateTime;\n        return changedDateTime;\n    }\n}\n\n// Business Event class\nfinal class CustomerCreditLimitChangedEvent extends BusinessEvent\n{\n    private CustomerCreditLimitChangedContract contract;\n\n    public BusinessEventContract buildContract()\n    {\n        return contract;\n    }\n\n    public EventId eventId()\n    {\n        return 'CustomerCreditLimitChanged';\n    }\n\n    public EventDescription eventDescription()\n    {\n        return 'Customer credit limit has been modified';\n    }\n\n    public static CustomerCreditLimitChangedEvent newFromCustTable(CustTable _custTable, AmountCur _oldLimit)\n    {\n        CustomerCreditLimitChangedEvent event = new CustomerCreditLimitChangedEvent();\n        CustomerCreditLimitChangedContract eventContract = new CustomerCreditLimitChangedContract();\n        \n        eventContract.parmCustAccount(_custTable.AccountNum);\n        eventContract.parmOldCreditMax(_oldLimit);\n        eventContract.parmNewCreditMax(_custTable.CreditMax);\n        eventContract.parmChangedBy(curUserId());\n        eventContract.parmChangedDateTime(DateTimeUtil::utcNow());\n        \n        event.contract = eventContract;\n        return event;\n    }\n\n    public static void fireEvent(CustTable _custTable, AmountCur _oldLimit)\n    {\n        CustomerCreditLimitChangedEvent event = CustomerCreditLimitChangedEvent::newFromCustTable(_custTable, _oldLimit);\n        BusinessEventsManager::fireEvent(event);\n    }\n}"
+        },
+        {
+          "title": "Chain of Command for Firing Custom Events",
+          "description": "CoC implementation on CustTable.update() to automatically fire credit limit change events",
+          "language": "xpp",
+          "code": "[ExtensionOf(tableStr(CustTable))]\nfinal class CustTable_BusinessEvent_Extension\n{\n    public void update()\n    {\n        CustTable originalRecord = this.orig();\n        AmountCur oldCreditMax = originalRecord.CreditMax;\n        AmountCur newCreditMax = this.CreditMax;\n        \n        // Call original update method first\n        next update();\n        \n        // Fire business event only if credit limit actually changed\n        if (oldCreditMax != newCreditMax && this.RecId)\n        {\n            try\n            {\n                CustomerCreditLimitChangedEvent::fireEvent(this, oldCreditMax);\n            }\n            catch (Exception::Error)\n            {\n                // Log error but don't block the main transaction\n                error(strFmt('Failed to fire CustomerCreditLimitChanged event for account %1: %2', \n                            this.AccountNum, CLRInterop::getLastException().Message));\n            }\n        }\n    }\n}"
+        },
+        {
+          "title": "Advanced Event Filtering and Conditional Firing",
+          "description": "Sophisticated business event with conditional logic, batch context handling, and performance optimization",
+          "language": "xpp",
+          "code": "// Enhanced event class with filtering capabilities\nfinal class InventTransQuantityChangedEvent extends BusinessEvent\n{\n    private InventTransQuantityChangedContract contract;\n    private boolean shouldFireEvent;\n\n    public BusinessEventContract buildContract()\n    {\n        return contract;\n    }\n\n    public EventId eventId()\n    {\n        return 'InventTransQuantityChanged';\n    }\n\n    public EventDescription eventDescription()\n    {\n        return 'Inventory transaction quantity changed significantly';\n    }\n\n    // Override to implement conditional firing logic\n    public boolean canFireBusinessEvent()\n    {\n        // Don't fire events during batch operations to avoid flooding\n        if (BatchHeader::isExecutingInBatch())\n        {\n            return false;\n        }\n        \n        // Don't fire for system users or integration accounts\n        if (strStartsWith(curUserId(), 'SYS_') || strStartsWith(curUserId(), 'INT_'))\n        {\n            return false;\n        }\n        \n        return shouldFireEvent;\n    }\n\n    public static void fireEventIfSignificant(InventTrans _inventTrans, Qty _oldQty)\n    {\n        Qty qtyChange = abs(_inventTrans.Qty - _oldQty);\n        \n        // Only fire event if quantity change is significant (> 10% or > 100 units)\n        InventTable inventTable = InventTable::find(_inventTrans.ItemId);\n        boolean isSignificantChange = (qtyChange > 100) || \n                                     (_oldQty && (qtyChange / abs(_oldQty) > 0.1));\n        \n        if (isSignificantChange)\n        {\n            InventTransQuantityChangedEvent event = new InventTransQuantityChangedEvent();\n            InventTransQuantityChangedContract eventContract = new InventTransQuantityChangedContract();\n            \n            eventContract.parmItemId(_inventTrans.ItemId);\n            eventContract.parmItemName(inventTable.itemName());\n            eventContract.parmOldQuantity(_oldQty);\n            eventContract.parmNewQuantity(_inventTrans.Qty);\n            eventContract.parmQuantityChange(qtyChange);\n            eventContract.parmWarehouse(_inventTrans.InventLocationId);\n            eventContract.parmTransactionDate(_inventTrans.DatePhysical);\n            \n            event.contract = eventContract;\n            event.shouldFireEvent = true;\n            \n            // Use try-catch to ensure main business logic isn't affected by event failures\n            try\n            {\n                BusinessEventsManager::fireEvent(event);\n                info(strFmt('Business event fired for item %1, quantity change: %2', \n                           _inventTrans.ItemId, qtyChange));\n            }\n            catch (Exception::Error)\n            {\n                warning(strFmt('Failed to fire inventory quantity change event: %1', \n                              CLRInterop::getLastException().Message));\n            }\n        }\n    }\n}\n\n[DataContract]\nfinal class InventTransQuantityChangedContract extends BusinessEventContract\n{\n    private ItemId itemId;\n    private ItemName itemName;\n    private Qty oldQuantity;\n    private Qty newQuantity;\n    private Qty quantityChange;\n    private InventLocationId warehouse;\n    private TransDate transactionDate;\n\n    [DataMember('ItemId')]\n    public ItemId parmItemId(ItemId _itemId = itemId)\n    {\n        itemId = _itemId;\n        return itemId;\n    }\n\n    [DataMember('ItemName')]\n    public ItemName parmItemName(ItemName _itemName = itemName)\n    {\n        itemName = _itemName;\n        return itemName;\n    }\n\n    [DataMember('OldQuantity')]\n    public Qty parmOldQuantity(Qty _oldQuantity = oldQuantity)\n    {\n        oldQuantity = _oldQuantity;\n        return oldQuantity;\n    }\n\n    [DataMember('NewQuantity')]\n    public Qty parmNewQuantity(Qty _newQuantity = newQuantity)\n    {\n        newQuantity = _newQuantity;\n        return newQuantity;\n    }\n\n    [DataMember('QuantityChange')]\n    public Qty parmQuantityChange(Qty _quantityChange = quantityChange)\n    {\n        quantityChange = _quantityChange;\n        return quantityChange;\n    }\n\n    [DataMember('Warehouse')]\n    public InventLocationId parmWarehouse(InventLocationId _warehouse = warehouse)\n    {\n        warehouse = _warehouse;\n        return warehouse;\n    }\n\n    [DataMember('TransactionDate')]\n    public TransDate parmTransactionDate(TransDate _transactionDate = transactionDate)\n    {\n        transactionDate = _transactionDate;\n        return transactionDate;\n    }\n}"
+        },
+        {
+          "title": "Business Event Testing and Debugging Utilities",
+          "description": "Runbase job for testing business events with comprehensive logging and error handling",
+          "language": "xpp",
+          "code": "final class BusinessEventTestJob extends RunBaseBatch\n{\n    private boolean testCustomerEvents;\n    private boolean testInventoryEvents;\n    private CustAccount testCustomerAccount;\n    \n    public boolean canGoBatch()\n    {\n        return true;\n    }\n    \n    public void run()\n    {\n        this.testBusinessEvents();\n    }\n    \n    private void testBusinessEvents()\n    {\n        ttsbegin;\n        try\n        {\n            if (testCustomerEvents)\n            {\n                this.testCustomerCreditLimitEvent();\n            }\n            \n            if (testInventoryEvents)\n            {\n                this.testInventoryQuantityEvent();\n            }\n            \n            ttscommit;\n            info('Business event testing completed successfully');\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(strFmt('Business event testing failed: %1', CLRInterop::getLastException().Message));\n        }\n    }\n    \n    private void testCustomerCreditLimitEvent()\n    {\n        CustTable custTable = CustTable::find(testCustomerAccount, true);\n        if (!custTable)\n        {\n            warning(strFmt('Customer account %1 not found', testCustomerAccount));\n            return;\n        }\n        \n        AmountCur originalLimit = custTable.CreditMax;\n        AmountCur newLimit = originalLimit + 1000;\n        \n        info(strFmt('Testing credit limit change: %1 -> %2 for customer %3', \n                   originalLimit, newLimit, testCustomerAccount));\n        \n        // Update credit limit to trigger event\n        custTable.CreditMax = newLimit;\n        custTable.update();\n        \n        // Verify event was logged\n        this.verifyEventLogged('CustomerCreditLimitChanged', testCustomerAccount);\n        \n        // Restore original limit\n        custTable = CustTable::find(testCustomerAccount, true);\n        custTable.CreditMax = originalLimit;\n        custTable.update();\n    }\n    \n    private void testInventoryQuantityEvent()\n    {\n        // Find a test inventory transaction\n        InventTrans inventTrans;\n        select firstOnly inventTrans\n            where inventTrans.StatusIssue == StatusIssue::OnOrder\n               && inventTrans.Qty > 10;\n        \n        if (!inventTrans.RecId)\n        {\n            warning('No suitable inventory transaction found for testing');\n            return;\n        }\n        \n        Qty originalQty = inventTrans.Qty;\n        Qty newQty = originalQty + 500; // Significant change to trigger event\n        \n        info(strFmt('Testing inventory quantity change: %1 -> %2 for item %3', \n                   originalQty, newQty, inventTrans.ItemId));\n        \n        // Simulate quantity change\n        InventTransQuantityChangedEvent::fireEventIfSignificant(inventTrans, originalQty);\n        \n        this.verifyEventLogged('InventTransQuantityChanged', inventTrans.ItemId);\n    }\n    \n    private void verifyEventLogged(EventId _eventId, str _subject)\n    {\n        BusinessEventsLog eventLog;\n        select firstOnly eventLog\n            where eventLog.EventId == _eventId\n               && eventLog.Subject like strFmt('*%1*', _subject)\n               && eventLog.CreatedDateTime >= DateTimeUtil::addMinutes(DateTimeUtil::utcNow(), -5);\n        \n        if (eventLog.RecId)\n        {\n            info(strFmt('Event %1 successfully logged with subject %2', _eventId, eventLog.Subject));\n            info(strFmt('Event status: %1, Endpoint: %2', \n                       enum2Str(eventLog.Status), eventLog.EndpointId));\n        }\n        else\n        {\n            warning(strFmt('Event %1 was not found in BusinessEventsLog table', _eventId));\n        }\n    }\n    \n    public Object dialog()\n    {\n        DialogRunbase dialog = super();\n        dialog.addFieldValue(extendedTypeStr(NoYesId), testCustomerEvents, 'Test customer events');\n        dialog.addFieldValue(extendedTypeStr(NoYesId), testInventoryEvents, 'Test inventory events');\n        dialog.addFieldValue(extendedTypeStr(CustAccount), testCustomerAccount, 'Test customer account');\n        return dialog;\n    }\n    \n    public boolean getFromDialog()\n    {\n        testCustomerEvents = dialog.getValue(1);\n        testInventoryEvents = dialog.getValue(2);\n        testCustomerAccount = dialog.getValue(3);\n        return super();\n    }\n    \n    public static void main(Args _args)\n    {\n        BusinessEventTestJob job = new BusinessEventTestJob();\n        if (job.prompt())\n        {\n            job.runOperation();\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Business Events must inherit from BusinessEvent or BusinessEventContract — the framework requires specific base classes for proper serialization and delivery mechanisms",
+        "Use canFireBusinessEvent() override to implement intelligent filtering — avoid flooding external systems with unnecessary events during batch operations or system processes",
+        "Event payloads follow CloudEvents v1.0 specification — ensure your DataContract properties use appropriate DataMember attributes for consistent JSON serialization",
+        "Fire events AFTER successful database commits — use post-transaction hooks or CoC on update() methods to ensure data consistency before external notification",
+        "Implement comprehensive error handling around BusinessEventsManager::fireEvent() — event failures should never break core business transactions"
+      ],
+      "gotchas": [
+        "Events fired within ttsbegin/ttscommit blocks may not deliver if transaction rolls back — always fire events after successful commits or use post-transaction delegates",
+        "Missing DataMember attributes on contract properties causes empty JSON payloads — the serialization framework silently skips properties without proper decoration",
+        "Business Events don't respect company context automatically — explicitly include company information in your contract if cross-company event handling is required"
+      ],
+      "performance_tips": [
+        "Use conditional firing logic in canFireBusinessEvent() to avoid unnecessary Azure Service Bus calls — implement threshold-based filtering for high-volume operations",
+        "Batch multiple related events into single payloads when possible — consider aggregating inventory movements or order line changes rather than firing per-record events"
+      ],
+      "related_topics": [
+        "xpp_coc",
+        "xpp_batch",
+        "ai_mcp"
+      ],
+      "quiz": [
+        {
+          "q": "Which method must be overridden in a custom BusinessEvent class to define the event payload structure?",
+          "options": [
+            "buildContract()",
+            "eventId()",
+            "canFireBusinessEvent()",
+            "fireEvent()"
+          ],
+          "answer": 0,
+          "explanation": "buildContract() is the required method that returns the BusinessEventContract instance containing the event's data payload. This method is called by the framework during event serialization."
+        },
+        {
+          "q": "When implementing Chain of Command on table.update() to fire business events, what is the recommended pattern?",
+          "options": [
+            "Fire event before calling next update()",
+            "Fire event within the same transaction as update()",
+            "Fire event after calling next update() with try/catch",
+            "Fire event in a separate batch job"
+          ],
+          "answer": 2,
+          "explanation": "Fire events after calling next update() with proper try/catch handling. This ensures the main business transaction completes successfully before attempting event delivery, and prevents event failures from breaking core functionality."
+        },
+        {
+          "q": "What is the purpose of implementing canFireBusinessEvent() in a custom business event class?",
+          "options": [
+            "To validate the event payload data",
+            "To determine event delivery endpoints",
+            "To implement conditional firing logic and filtering",
+            "To handle event serialization errors"
+          ],
+          "answer": 2,
+          "explanation": "canFireBusinessEvent() allows you to implement conditional logic that determines whether an event should be fired based on context (batch execution, user roles, data thresholds, etc.), preventing unnecessary external system calls."
+        }
+      ]
+    },
+    "generated_date": "2026-04-01",
+    "auto_generated": true
   }
 ]
