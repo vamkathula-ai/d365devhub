@@ -1,5 +1,13 @@
 [
   {
+    "date": "Apr 02",
+    "tag": "LESSON",
+    "title": "DIXF Custom Data Entities",
+    "section": "Data Model",
+    "level": "Expert",
+    "id": "data_dixf_entities"
+  },
+  {
     "date": "Apr 01",
     "tag": "LESSON",
     "title": "Business Events: Custom & OOB",
@@ -225,12 +233,5 @@
     "title": "Workflow Framework",
     "section": "Batch & Workflow",
     "level": "Expert"
-  },
-  {
-    "date": "Mar 01",
-    "tag": "LAUNCH",
-    "title": "D365 Dev Hub launched with 12 lessons!",
-    "section": "System",
-    "level": "Info"
   }
 ]

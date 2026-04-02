@@ -1,5 +1,5 @@
 {
-  "last_index": 23,
+  "last_index": 24,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -36,9 +36,10 @@
     "ext_query_extension",
     "ext_ssrs_extension",
     "ext_lookup_override",
-    "ext_business_event"
+    "ext_business_event",
+    "data_dixf_entities"
   ],
-  "last_run": "2026-04-01",
-  "last_title": "Business Events: Custom & OOB",
+  "last_run": "2026-04-02",
+  "last_title": "DIXF Custom Data Entities",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

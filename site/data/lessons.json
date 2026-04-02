@@ -2479,5 +2479,96 @@
     },
     "generated_date": "2026-04-01",
     "auto_generated": true
+  },
+  {
+    "id": "data_dixf_entities",
+    "title": "DIXF Custom Data Entities",
+    "section": "Data Model",
+    "level": "Expert",
+    "duration": "25 min read",
+    "tags": [
+      "DIXF",
+      "Data Entities",
+      "Data Management",
+      "ETL",
+      "Integration"
+    ],
+    "summary": "Master creating custom DIXF data entities for complex data migration and integration scenarios with advanced staging table handling, field mapping, and transformation logic.",
+    "content": {
+      "overview": "Data Import Export Framework (DIXF) remains critical for legacy data migration and complex ETL scenarios in D365 F&O, especially when standard data entities lack required transformation logic or staging capabilities. While OData entities handle most modern integrations, DIXF entities excel at batch processing, complex data validation, and scenarios requiring intermediate staging tables with custom business logic. Understanding DIXF entity development is essential for senior developers handling enterprise migrations, data cleansing operations, and integration with legacy systems that cannot consume OData endpoints directly. DIXF entities provide granular control over data transformation, validation sequences, and error handling that standard entities cannot match.",
+      "theory": "DIXF entities inherit from DMFEntity base class and implement the DMFIEntityProcessor interface, providing hooks for data transformation at multiple stages. The framework uses a three-tier architecture: source data, staging table (DMFEntityStaging descendants), and target table. Custom entities must implement getTargetEntity(), validateField(), and transformRecord() methods to handle business logic. The DMFEntityManager class orchestrates entity processing, while DMFExecutionId tracks processing batches. Staging tables automatically inherit fields from target tables but can include additional transformation fields. The framework supports both synchronous and asynchronous processing through the SysOperationService infrastructure, with DMFEntityProcessor handling the execution pipeline. Field mapping occurs through DMFEntityFieldMapping, supporting complex transformations including lookups, concatenation, and conditional logic.",
+      "code_examples": [
+        {
+          "title": "Custom DIXF Entity with Validation and Transformation",
+          "description": "Complete DIXF entity implementation for custom customer data import with advanced validation and lookup transformations",
+          "language": "xpp",
+          "code": "class DMFCustomerEntityCustom extends DMFEntity implements DMFIEntityProcessor\n{\n    private DMFCustomerStagingCustom stagingRecord;\n    private CustTable targetRecord;\n    \n    public void new()\n    {\n        super();\n        this.initializeEntity();\n    }\n    \n    protected void initializeEntity()\n    {\n        this.setTargetEntity(tableNum(CustTable));\n        this.setEntityName('CustomCustomerEntity');\n        this.setStagingTableId(tableNum(DMFCustomerStagingCustom));\n    }\n    \n    public Common getTargetEntity()\n    {\n        return this.targetRecord;\n    }\n    \n    public void initializeStagingRecord(Common _stagingRecord)\n    {\n        this.stagingRecord = _stagingRecord as DMFCustomerStagingCustom;\n        this.targetRecord.clear();\n        this.targetRecord.initValue();\n    }\n    \n    public boolean validateField(FieldId _fieldId, str _fieldValue)\n    {\n        boolean ret = true;\n        DMFEntityFieldMapping fieldMapping;\n        \n        switch (_fieldId)\n        {\n            case fieldNum(DMFCustomerStagingCustom, AccountNum):\n                if (!this.validateCustomerAccount(_fieldValue))\n                {\n                    ret = this.addValidationError(strFmt('@DMF:InvalidCustomerAccount', _fieldValue));\n                }\n                break;\n                \n            case fieldNum(DMFCustomerStagingCustom, CurrencyCode):\n                if (!Currency::exist(_fieldValue))\n                {\n                    ret = this.addValidationError(strFmt('@DMF:InvalidCurrency', _fieldValue));\n                }\n                break;\n                \n            case fieldNum(DMFCustomerStagingCustom, CustGroupId):\n                if (!CustGroup::exist(_fieldValue))\n                {\n                    // Attempt to create default customer group\n                    this.createDefaultCustGroup(_fieldValue);\n                }\n                break;\n        }\n        \n        return ret && super(_fieldId, _fieldValue);\n    }\n    \n    public void transformRecord()\n    {\n        // Primary key transformation\n        this.targetRecord.AccountNum = this.generateCustomerAccount();\n        \n        // Basic field mapping with null checks\n        this.targetRecord.Name = this.stagingRecord.CustomerName ? this.stagingRecord.CustomerName : this.targetRecord.AccountNum;\n        this.targetRecord.CurrencyCode = this.stagingRecord.CurrencyCode;\n        this.targetRecord.CustGroup = this.stagingRecord.CustGroupId;\n        \n        // Complex transformation with lookup\n        this.transformPaymentTerms();\n        this.transformDimensionValues();\n        this.transformAddressInformation();\n        \n        // Set system fields\n        this.targetRecord.PartyType = DirPartyType::Organization;\n        this.targetRecord.modifiedField(fieldNum(CustTable, PartyType));\n    }\n    \n    private boolean validateCustomerAccount(str _accountNum)\n    {\n        // Check format and uniqueness\n        if (strlen(_accountNum) > 20 || !match(_accountNum, '^[A-Z0-9]+$'))\n        {\n            return false;\n        }\n        \n        return !CustTable::exist(_accountNum);\n    }\n    \n    private str generateCustomerAccount()\n    {\n        str accountNum;\n        NumberSeq numberSeq;\n        \n        if (this.stagingRecord.AccountNum)\n        {\n            accountNum = this.stagingRecord.AccountNum;\n        }\n        else\n        {\n            numberSeq = NumberSeq::newGetNum(CustParameters::numRefCustomer());\n            accountNum = numberSeq.num();\n        }\n        \n        return accountNum;\n    }\n    \n    private void transformPaymentTerms()\n    {\n        PaymTerm paymTerm;\n        \n        if (this.stagingRecord.PaymentTermsCode)\n        {\n            select firstOnly paymTerm\n                where paymTerm.PaymTermId == this.stagingRecord.PaymentTermsCode;\n                \n            if (paymTerm.RecId)\n            {\n                this.targetRecord.PaymTermId = paymTerm.PaymTermId;\n            }\n            else\n            {\n                // Use default payment terms\n                this.targetRecord.PaymTermId = CustParameters::find().PaymTermId;\n                this.addWarning(strFmt('@DMF:PaymentTermsNotFound', this.stagingRecord.PaymentTermsCode));\n            }\n        }\n    }\n    \n    private void createDefaultCustGroup(str _custGroupId)\n    {\n        CustGroup custGroup;\n        \n        ttsbegin;\n        custGroup.clear();\n        custGroup.initValue();\n        custGroup.CustGroup = _custGroupId;\n        custGroup.Name = strFmt('Auto-created: %1', _custGroupId);\n        custGroup.PaymTermId = CustParameters::find().PaymTermId;\n        custGroup.insert();\n        ttscommit;\n        \n        info(strFmt('@DMF:CustomerGroupCreated', _custGroupId));\n    }\n}"
+        },
+        {
+          "title": "Advanced DIXF Processing with Error Handling",
+          "description": "DMF execution controller with comprehensive error handling, batch processing, and progress tracking",
+          "language": "xpp",
+          "code": "class DMFCustomProcessingController extends SysOperationServiceController\n{\n    private DMFExecutionId executionId;\n    private DMFStagingValidationLog validationLog;\n    private int processedRecords;\n    private int errorRecords;\n    \n    protected void new()\n    {\n        super();\n        this.parmClassName(classStr(DMFCustomProcessingService));\n        this.parmMethodName(methodStr(DMFCustomProcessingService, processCustomerData));\n    }\n    \n    public static DMFCustomProcessingController construct()\n    {\n        return new DMFCustomProcessingController();\n    }\n    \n    public static void main(Args _args)\n    {\n        DMFCustomProcessingController controller;\n        DMFCustomProcessingContract contract;\n        \n        controller = DMFCustomProcessingController::construct();\n        contract = controller.getDataContractObject();\n        \n        // Set processing parameters\n        contract.parmExecutionId(DMFExecutionId::generate());\n        contract.parmBatchSize(1000);\n        contract.parmValidationOnly(false);\n        \n        if (controller.prompt())\n        {\n            controller.startOperation();\n        }\n    }\n    \n    protected void preRunModifyContract()\n    {\n        DMFCustomProcessingContract contract = this.getDataContractObject();\n        \n        if (!contract.parmExecutionId())\n        {\n            contract.parmExecutionId(DMFExecutionId::generate());\n        }\n        \n        this.executionId = contract.parmExecutionId();\n        super();\n    }\n}\n\nclass DMFCustomProcessingService extends SysOperationServiceBase\n{\n    public void processCustomerData(DMFCustomProcessingContract _contract)\n    {\n        DMFEntityProcessor processor;\n        DMFCustomerStagingCustom stagingRecord;\n        DMFStagingValidationLog validationLog;\n        int batchCounter = 0;\n        int totalRecords = 0;\n        \n        try\n        {\n            ttsbegin;\n            \n            // Initialize processor\n            processor = DMFEntityProcessor::newEntityClass(classStr(DMFCustomerEntityCustom));\n            processor.parmExecutionId(_contract.parmExecutionId());\n            \n            // Count total records for progress tracking\n            select count(RecId) from stagingRecord\n                where stagingRecord.ExecutionId == _contract.parmExecutionId()\n                   && stagingRecord.TransferStatus == DMFTransferStatus::NotStarted;\n                   \n            totalRecords = stagingRecord.RecId;\n            info(strFmt('@DMF:ProcessingRecords', totalRecords));\n            \n            // Process in batches\n            while select forUpdate stagingRecord\n                where stagingRecord.ExecutionId == _contract.parmExecutionId()\n                   && stagingRecord.TransferStatus == DMFTransferStatus::NotStarted\n            {\n                batchCounter++;\n                \n                try\n                {\n                    processor.initializeStagingRecord(stagingRecord);\n                    \n                    if (processor.validateRecord())\n                    {\n                        if (!_contract.parmValidationOnly())\n                        {\n                            processor.transformRecord();\n                            processor.insertTargetRecord();\n                            stagingRecord.TransferStatus = DMFTransferStatus::Completed;\n                        }\n                        else\n                        {\n                            stagingRecord.TransferStatus = DMFTransferStatus::Validated;\n                        }\n                    }\n                    else\n                    {\n                        stagingRecord.TransferStatus = DMFTransferStatus::Error;\n                        this.logValidationErrors(processor, stagingRecord.RecId);\n                    }\n                    \n                    stagingRecord.update();\n                }\n                catch (Exception::Error)\n                {\n                    error(strFmt('@DMF:RecordProcessingError', stagingRecord.RecId, getLastError()));\n                    stagingRecord.TransferStatus = DMFTransferStatus::Error;\n                    stagingRecord.update();\n                }\n                \n                // Commit batch and show progress\n                if (batchCounter >= _contract.parmBatchSize())\n                {\n                    ttscommit;\n                    info(strFmt('@DMF:ProgressUpdate', batchCounter, totalRecords));\n                    ttsbegin;\n                    batchCounter = 0;\n                }\n            }\n            \n            ttscommit;\n            this.generateProcessingSummary(_contract.parmExecutionId());\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            throw error(strFmt('@DMF:ProcessingFailed', getLastError()));\n        }\n    }\n    \n    private void logValidationErrors(DMFEntityProcessor _processor, RecId _stagingRecId)\n    {\n        DMFStagingValidationLog validationLog;\n        List errorList = _processor.getValidationErrors();\n        ListIterator iterator = new ListIterator(errorList);\n        \n        while (iterator.more())\n        {\n            validationLog.clear();\n            validationLog.initValue();\n            validationLog.StagingRecId = _stagingRecId;\n            validationLog.ErrorMessage = iterator.value();\n            validationLog.CreatedDateTime = DateTimeUtil::utcNow();\n            validationLog.insert();\n            \n            iterator.next();\n        }\n    }\n    \n    private void generateProcessingSummary(DMFExecutionId _executionId)\n    {\n        DMFCustomerStagingCustom stagingRecord;\n        int completed, errors, validated;\n        \n        // Count by status\n        select count(RecId) from stagingRecord\n            where stagingRecord.ExecutionId == _executionId\n               && stagingRecord.TransferStatus == DMFTransferStatus::Completed;\n        completed = stagingRecord.RecId;\n        \n        select count(RecId) from stagingRecord\n            where stagingRecord.ExecutionId == _executionId\n               && stagingRecord.TransferStatus == DMFTransferStatus::Error;\n        errors = stagingRecord.RecId;\n        \n        select count(RecId) from stagingRecord\n            where stagingRecord.ExecutionId == _executionId\n               && stagingRecord.TransferStatus == DMFTransferStatus::Validated;\n        validated = stagingRecord.RecId;\n        \n        info(strFmt('@DMF:ProcessingSummary', _executionId, completed, errors, validated));\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "DIXF entities must extend DMFEntity and implement DMFIEntityProcessor interface with mandatory getTargetEntity(), validateField(), and transformRecord() methods",
+        "Staging tables automatically inherit target table structure but support additional transformation fields for complex business logic scenarios",
+        "Field validation occurs before transformation, allowing early error detection and custom business rule enforcement through validateField() method",
+        "DMFExecutionId provides batch tracking and parallel processing support, essential for large-scale data migration scenarios",
+        "Error handling must account for both validation errors (business logic) and system errors (database constraints, deadlocks) with appropriate ttsbegin/ttscommit patterns"
+      ],
+      "gotchas": [
+        "Failing to call super() in validateField() bypasses framework validation, potentially allowing invalid data into staging tables — always chain validation calls properly",
+        "Not implementing proper transaction boundaries in transformRecord() can cause partial updates during errors — wrap all target record modifications in ttsbegin/ttscommit blocks",
+        "Forgetting to call modifiedField() after programmatic field updates prevents change tracking and can break downstream processes — explicitly mark modified fields"
+      ],
+      "performance_tips": [
+        "Process staging records in batches with periodic ttscommit to prevent transaction log growth and reduce lock escalation risks during large imports",
+        "Use set-based operations for lookup validations instead of record-by-record queries to minimize database roundtrips and improve throughput"
+      ],
+      "related_topics": [
+        "data_odata_entities",
+        "data_integration_patterns",
+        "xpp_batch"
+      ],
+      "quiz": [
+        {
+          "q": "Which method must be implemented in a custom DIXF entity to handle business logic validation before data transformation?",
+          "options": [
+            "validateRecord()",
+            "validateField()",
+            "checkData()",
+            "preValidate()"
+          ],
+          "answer": 1,
+          "explanation": "validateField() is the mandatory method for implementing custom validation logic in DIXF entities. It receives fieldId and fieldValue parameters, allowing granular validation control before data reaches the transformation stage."
+        },
+        {
+          "q": "What is the primary advantage of DIXF entities over standard OData entities for data migration scenarios?",
+          "options": [
+            "Better REST API support",
+            "Staging table capabilities with transformation logic",
+            "Faster processing speed",
+            "Native mobile app integration"
+          ],
+          "answer": 1,
+          "explanation": "DIXF entities provide staging table capabilities that allow complex data transformation, validation, and error handling before inserting into target tables. This intermediate staging is crucial for data cleansing and complex business logic that OData entities cannot handle."
+        },
+        {
+          "q": "When implementing transformRecord() in a DIXF entity, what framework method should be called after programmatically setting field values?",
+          "options": [
+            "validateChanges()",
+            "commitRecord()",
+            "modifiedField()",
+            "markDirty()"
+          ],
+          "answer": 2,
+          "explanation": "modifiedField() must be called after programmatically setting field values to ensure proper change tracking and trigger downstream processes like field validation and event handlers."
+        }
+      ]
+    },
+    "generated_date": "2026-04-02",
+    "auto_generated": true
   }
 ]
