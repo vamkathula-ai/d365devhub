@@ -1,1 +1,1 @@
-Recurring Integrations via DIXF API
+Data Entity Events & Staging Tables

@@ -1,5 +1,5 @@
 {
-  "last_index": 27,
+  "last_index": 28,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -40,9 +40,10 @@
     "data_dixf_entities",
     "data_composite_entity",
     "data_odata_filter",
-    "data_recurring_batch"
+    "data_recurring_batch",
+    "data_entity_events"
   ],
-  "last_run": "2026-04-05",
-  "last_title": "Recurring Integrations via DIXF API",
+  "last_run": "2026-04-06",
+  "last_title": "Data Entity Events & Staging Tables",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

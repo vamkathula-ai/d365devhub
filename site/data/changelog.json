@@ -1,5 +1,13 @@
 [
   {
+    "date": "Apr 06",
+    "tag": "LESSON",
+    "title": "Data Entity Events & Staging Tables",
+    "section": "Data Model",
+    "level": "Expert",
+    "id": "data_entity_events"
+  },
+  {
     "date": "Apr 05",
     "tag": "LESSON",
     "title": "Recurring Integrations via DIXF API",
@@ -227,13 +235,6 @@
     "date": "Mar 10",
     "tag": "NEW",
     "title": "MCP Protocol \u2014 D365 as AI Tool Provider",
-    "section": "Agentic AI",
-    "level": "Expert"
-  },
-  {
-    "date": "Mar 08",
-    "tag": "LESSON",
-    "title": "Agentic AI Architecture for D365",
     "section": "Agentic AI",
     "level": "Expert"
   }
