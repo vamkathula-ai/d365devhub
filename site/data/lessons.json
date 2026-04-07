@@ -2950,5 +2950,95 @@
     },
     "generated_date": "2026-04-06",
     "auto_generated": true
+  },
+  {
+    "id": "fin_voucher_framework",
+    "title": "Voucher Framework & Ledger Posting",
+    "section": "Finance",
+    "level": "Expert",
+    "duration": "45 min read",
+    "tags": [
+      "voucher",
+      "ledger",
+      "posting",
+      "generaljournal",
+      "subledger"
+    ],
+    "summary": "Master the D365 F&O voucher framework architecture, from LedgerJournalEngine to custom subledger posting patterns with real-world implementation examples.",
+    "content": {
+      "overview": "The voucher framework in D365 F&O is the backbone of all financial transactions, orchestrating the flow from source documents through subledger accounting to general ledger posting. Understanding this framework is crucial for any developer working with financial modules, as it governs how transactions are validated, posted, and reversed across the system. This lesson explores the deep architecture from LedgerJournalEngine and LedgerPostingController through to custom subledger implementations, providing the technical foundation needed to extend or customize financial posting behavior in enterprise scenarios.",
+      "theory": "The voucher framework operates through a sophisticated multi-layered architecture centered around the LedgerJournalEngine class hierarchy. At its core, the framework uses the Strategy pattern with LedgerPostingController as the orchestrator, delegating to specific engines like LedgerJournalEngineVendInvoice, LedgerJournalEngineAsset, or custom implementations. The posting process flows through validation (LedgerJournalCheckPost), posting preparation (LedgerJournalPost), and final commitment to GeneralJournalEntry and related tables. Key AOT objects include the LedgerJournalTrans table for staging, LedgerPostingType enum for classification, and the extensive LedgerDimension framework for account structures. The framework supports both immediate posting and batch processing through LedgerJournalPostBatch, with transaction integrity maintained via proper tts boundary management. Subledger accounting extends this through SourceDocumentLine and AccountingDistribution tables, enabling complex multi-dimensional postings with full audit trails back to originating transactions.",
+      "code_examples": [
+        {
+          "title": "Custom Voucher Posting with LedgerJournalEngine",
+          "description": "Demonstrates creating a custom journal posting engine with proper validation and error handling",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Custom journal engine for special GL postings\n/// </summary>\nclass CustomLedgerJournalEngine extends LedgerJournalEngine\n{\n    protected boolean checkJournalLine(LedgerJournalTrans _ledgerJournalTrans)\n    {\n        boolean ret = super(_ledgerJournalTrans);\n        \n        // Custom validation logic\n        if (_ledgerJournalTrans.AmountCurDebit == 0 && _ledgerJournalTrans.AmountCurCredit == 0)\n        {\n            this.checkFailed(\"@SYS89358\"); // Amount cannot be zero\n            ret = false;\n        }\n        \n        // Validate dimension combinations\n        if (!DimensionValidationHelper::validateLedgerDimension(\n            _ledgerJournalTrans.LedgerDimension))\n        {\n            this.checkFailed(\"Invalid dimension combination\");\n            ret = false;\n        }\n        \n        return ret;\n    }\n    \n    protected void postJournalLine(LedgerJournalTrans _ledgerJournalTrans)\n    {\n        GeneralJournalEntry generalJournalEntry;\n        GeneralJournalAccountEntry accountEntry;\n        \n        ttsbegin;\n        try\n        {\n            // Create journal entry header\n            generalJournalEntry.clear();\n            generalJournalEntry.JournalNumber = NumberSeq::num(LedgerParameters::numRefGeneralJournalEntryId()).num();\n            generalJournalEntry.AccountingDate = _ledgerJournalTrans.TransDate;\n            generalJournalEntry.DocumentNumber = _ledgerJournalTrans.Voucher;\n            generalJournalEntry.PostingLayer = CurrentOperationsTax::currentPostingLayer();\n            generalJournalEntry.insert();\n            \n            // Create account entry\n            accountEntry.clear();\n            accountEntry.GeneralJournalEntry = generalJournalEntry.RecId;\n            accountEntry.LedgerDimension = _ledgerJournalTrans.LedgerDimension;\n            accountEntry.AccountingCurrencyAmount = _ledgerJournalTrans.AmountCurDebit - _ledgerJournalTrans.AmountCurCredit;\n            accountEntry.TransactionCurrencyAmount = accountEntry.AccountingCurrencyAmount;\n            accountEntry.TransactionCurrencyCode = Ledger::accountingCurrency();\n            accountEntry.PostingType = LedgerPostingType::LedgerJournal;\n            accountEntry.Text = _ledgerJournalTrans.Txt;\n            accountEntry.insert();\n            \n            // Update journal trans status\n            _ledgerJournalTrans.selectForUpdate(true);\n            _ledgerJournalTrans.Posted = NoYes::Yes;\n            _ledgerJournalTrans.update();\n            \n            ttscommit;\n            info(strFmt(\"Voucher %1 posted successfully\", _ledgerJournalTrans.Voucher));\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            throw Exception::Error;\n        }\n    }\n    \n    public static void main(Args _args)\n    {\n        LedgerJournalTable journalTable;\n        LedgerJournalTrans journalTrans;\n        CustomLedgerJournalEngine engine;\n        \n        // Example usage\n        select firstonly journalTable where journalTable.JournalNum == \"00001\";\n        \n        engine = new CustomLedgerJournalEngine();\n        engine.parmLedgerJournalTable(journalTable);\n        \n        while select journalTrans where journalTrans.JournalNum == journalTable.JournalNum\n            && journalTrans.Posted == NoYes::No\n        {\n            if (engine.checkJournalLine(journalTrans))\n            {\n                engine.postJournalLine(journalTrans);\n            }\n        }\n    }\n}"
+        },
+        {
+          "title": "Subledger Accounting Integration",
+          "description": "Advanced pattern for integrating custom business logic with subledger accounting framework",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Custom subledger posting for purchase order accruals\n/// </summary>\nclass CustomSubledgerPostingManager\n{\n    private SourceDocumentHeader sourceDocHeader;\n    private PurchTable purchTable;\n    \n    public void createAccrualEntries(PurchId _purchId)\n    {\n        PurchLine purchLine;\n        SourceDocumentLine sourceDocLine;\n        AccountingDistribution acctDist;\n        LedgerDimensionDefaultAccount ledgerDim;\n        \n        this.purchTable = PurchTable::find(_purchId);\n        \n        if (!this.purchTable)\n        {\n            throw Exception::Error;\n        }\n        \n        ttsbegin;\n        try\n        {\n            // Create source document header\n            this.createSourceDocumentHeader();\n            \n            while select purchLine where purchLine.PurchId == _purchId\n            {\n                // Create source document line\n                sourceDocLine = this.createSourceDocumentLine(purchLine);\n                \n                // Create accounting distributions\n                this.createAccountingDistributions(sourceDocLine, purchLine);\n            }\n            \n            // Commit to subledger\n            this.commitToSubledger();\n            \n            ttscommit;\n            info(strFmt(\"Subledger entries created for PO %1\", _purchId));\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(\"Failed to create subledger entries\");\n            throw Exception::Error;\n        }\n    }\n    \n    private void createSourceDocumentHeader()\n    {\n        sourceDocHeader.clear();\n        sourceDocHeader.SourceDocumentHeaderId = NumberSeq::num(\n            VendParameters::numRefSourceDocumentHeaderId()).num();\n        sourceDocHeader.SourceDocumentType = SourceDocumentType::PurchaseOrder;\n        sourceDocHeader.DocumentNumber = this.purchTable.PurchId;\n        sourceDocHeader.AccountingDate = this.purchTable.DeliveryDate;\n        sourceDocHeader.DefaultDimension = this.purchTable.DefaultDimension;\n        sourceDocHeader.insert();\n    }\n    \n    private SourceDocumentLine createSourceDocumentLine(PurchLine _purchLine)\n    {\n        SourceDocumentLine sourceDocLine;\n        \n        sourceDocLine.clear();\n        sourceDocLine.SourceDocumentHeader = this.sourceDocHeader.RecId;\n        sourceDocLine.SourceDocumentLineId = NumberSeq::num(\n            VendParameters::numRefSourceDocumentLineId()).num();\n        sourceDocLine.Description = _purchLine.Name;\n        sourceDocLine.LineAmount = _purchLine.LineAmount;\n        sourceDocLine.insert();\n        \n        return sourceDocLine;\n    }\n    \n    private void createAccountingDistributions(\n        SourceDocumentLine _sourceDocLine,\n        PurchLine _purchLine)\n    {\n        AccountingDistribution acctDist;\n        LedgerDimensionDefaultAccount expenseAccount, accrualAccount;\n        \n        // Get accounts from posting profiles\n        expenseAccount = VendPostingProfile::accountExpense(\n            this.purchTable.OrderAccount, _purchLine.ItemId);\n        accrualAccount = VendPostingProfile::accountPurchaseExpenseAccrual(\n            this.purchTable.OrderAccount, _purchLine.ItemId);\n        \n        // Expense distribution\n        acctDist.clear();\n        acctDist.SourceDocumentLine = _sourceDocLine.RecId;\n        acctDist.LedgerDimension = expenseAccount;\n        acctDist.AccountingCurrencyAmount = _purchLine.LineAmount;\n        acctDist.DistributionType = AccountingDistributionType::Expense;\n        acctDist.insert();\n        \n        // Accrual distribution (offsetting)\n        acctDist.clear();\n        acctDist.SourceDocumentLine = _sourceDocLine.RecId;\n        acctDist.LedgerDimension = accrualAccount;\n        acctDist.AccountingCurrencyAmount = -_purchLine.LineAmount;\n        acctDist.DistributionType = AccountingDistributionType::Liability;\n        acctDist.insert();\n    }\n    \n    private void commitToSubledger()\n    {\n        SubledgerJournalizer journalizer = SubledgerJournalizer::newSourceDocumentHeader(\n            this.sourceDocHeader);\n        journalizer.journalize();\n        \n        // Transfer to general ledger if configured\n        if (LedgerParameters::find().TransferToGeneralJournal == NoYes::Yes)\n        {\n            GeneralJournalService::transferSubledgerToGeneralJournal(\n                this.sourceDocHeader.RecId);\n        }\n    }\n    \n    public static void main(Args _args)\n    {\n        CustomSubledgerPostingManager manager = new CustomSubledgerPostingManager();\n        manager.createAccrualEntries(\"PO-000001\");\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "LedgerJournalEngine serves as the base class for all journal posting logic — extend it for custom posting behaviors rather than bypassing the framework",
+        "Always use ttsbegin/ttscommit boundaries around voucher creation to ensure atomicity of GeneralJournalEntry and related table updates",
+        "The LedgerDimension framework requires proper validation through DimensionValidationHelper to prevent posting failures in production",
+        "Subledger accounting through SourceDocumentLine provides audit trails and supports complex multi-dimensional accounting scenarios",
+        "PostingType enum values control which posting profiles and accounts are selected — understand the implications for your business logic"
+      ],
+      "gotchas": [
+        "Never directly insert into GeneralJournalEntry without going through proper engines — this bypasses validation and can corrupt financial data integrity",
+        "LedgerJournalCheckPost must complete successfully before calling LedgerJournalPost — attempting to post unchecked journals will fail with cryptic errors",
+        "Transaction currency vs accounting currency amounts must be properly calculated — mismatches will cause reconciliation issues and audit failures"
+      ],
+      "performance_tips": [
+        "Use set-based operations with update_recordset when updating large numbers of journal transactions rather than individual record updates",
+        "Cache LedgerDimension lookups when processing multiple lines with the same account combinations to avoid repeated database hits"
+      ],
+      "related_topics": [
+        "xpp_financial",
+        "xpp_batch"
+      ],
+      "quiz": [
+        {
+          "q": "What is the correct inheritance hierarchy for creating a custom journal posting engine?",
+          "options": [
+            "Extend LedgerJournalPost directly",
+            "Extend LedgerJournalEngine and override key methods",
+            "Implement LedgerPostingController interface",
+            "Extend GeneralJournalEntry table"
+          ],
+          "answer": 1,
+          "explanation": "LedgerJournalEngine is the proper base class that provides the framework structure with virtual methods like checkJournalLine() and postJournalLine() that should be overridden for custom logic."
+        },
+        {
+          "q": "Which table serves as the staging area for journal transactions before posting?",
+          "options": [
+            "GeneralJournalEntry",
+            "LedgerJournalTrans",
+            "AccountingDistribution",
+            "SourceDocumentLine"
+          ],
+          "answer": 1,
+          "explanation": "LedgerJournalTrans is the staging table where journal lines are created and validated before being posted to the permanent GeneralJournalEntry and GeneralJournalAccountEntry tables."
+        },
+        {
+          "q": "What is the primary purpose of the SourceDocumentLine table in subledger accounting?",
+          "options": [
+            "Store final GL entries",
+            "Provide audit trail back to source transactions",
+            "Cache dimension validations",
+            "Store posting profiles"
+          ],
+          "answer": 1,
+          "explanation": "SourceDocumentLine provides the audit trail that links accounting distributions back to their originating business transactions, enabling full traceability in subledger accounting."
+        }
+      ]
+    },
+    "generated_date": "2026-04-07",
+    "auto_generated": true
   }
 ]

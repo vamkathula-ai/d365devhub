@@ -1,5 +1,5 @@
 {
-  "last_index": 28,
+  "last_index": 29,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -41,9 +41,10 @@
     "data_composite_entity",
     "data_odata_filter",
     "data_recurring_batch",
-    "data_entity_events"
+    "data_entity_events",
+    "fin_voucher_framework"
   ],
-  "last_run": "2026-04-06",
-  "last_title": "Data Entity Events & Staging Tables",
+  "last_run": "2026-04-07",
+  "last_title": "Voucher Framework & Ledger Posting",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
