@@ -1,5 +1,5 @@
 {
-  "last_index": 30,
+  "last_index": 31,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -43,9 +43,10 @@
     "data_recurring_batch",
     "data_entity_events",
     "fin_voucher_framework",
-    "fin_subledger"
+    "fin_subledger",
+    "fin_tax_engine"
   ],
-  "last_run": "2026-04-08",
-  "last_title": "Subledger Journal & AccountingEngine",
+  "last_run": "2026-04-09",
+  "last_title": "GTE Tax Engine Configuration & X++",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
