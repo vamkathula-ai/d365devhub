@@ -1,5 +1,5 @@
 {
-  "last_index": 31,
+  "last_index": 32,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -44,9 +44,10 @@
     "data_entity_events",
     "fin_voucher_framework",
     "fin_subledger",
-    "fin_tax_engine"
+    "fin_tax_engine",
+    "fin_bank_reconcile"
   ],
-  "last_run": "2026-04-09",
-  "last_title": "GTE Tax Engine Configuration & X++",
+  "last_run": "2026-04-10",
+  "last_title": "Bank Reconciliation Automation",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
