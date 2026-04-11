@@ -1,5 +1,5 @@
 {
-  "last_index": 32,
+  "last_index": 33,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -45,9 +45,10 @@
     "fin_voucher_framework",
     "fin_subledger",
     "fin_tax_engine",
-    "fin_bank_reconcile"
+    "fin_bank_reconcile",
+    "fin_budget_control"
   ],
-  "last_run": "2026-04-10",
-  "last_title": "Bank Reconciliation Automation",
+  "last_run": "2026-04-11",
+  "last_title": "Budget Control & Encumbrance X++",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

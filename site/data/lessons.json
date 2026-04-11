@@ -3325,5 +3325,96 @@
     },
     "generated_date": "2026-04-10",
     "auto_generated": true
+  },
+  {
+    "id": "fin_budget_control",
+    "title": "Budget Control & Encumbrance X++",
+    "section": "Finance",
+    "level": "Expert",
+    "duration": "25 min read",
+    "tags": [
+      "budget-control",
+      "encumbrance",
+      "financial-workflow",
+      "public-sector",
+      "purchase-order"
+    ],
+    "summary": "Master D365 F&O's budget control framework implementation, including encumbrance calculations, budget reservation workflows, and custom budget control extensions.",
+    "content": {
+      "overview": "Budget Control in D365 F&O is a sophisticated financial framework that provides real-time budget checking and encumbrance management, particularly critical in public sector implementations. The system intercepts financial transactions at various stages (requisition, purchase order, vendor invoice) to verify budget availability and create encumbrance records that reserve budget funds. This lesson explores the deep technical architecture behind BudgetControlConfiguration, BudgetSourceTracking, and the encumbrance calculation engine.\n\nUnderstanding budget control is essential for developers working on government, education, or any organization requiring strict fiscal oversight. The framework integrates tightly with workflow systems, dimension frameworks, and posting engines. You'll learn to extend budget checking rules, create custom budget sources, and optimize the performance-critical budget availability calculations that can impact user experience during high-volume transaction processing.",
+      "theory": "D365 F&O's budget control architecture centers around the BudgetControlConfiguration table and the BudgetSourceTracking framework. The BudgetControlConfiguration defines which document types (PurchReq, PurchTable, VendInvoiceJour) participate in budget checking, while BudgetSourceTracking maintains the hierarchical relationship between originating documents and their downstream effects. The core calculation engine relies on BudgetTransactionHeader and BudgetTransactionLine tables to store encumbrance details, with the BudgetControlStatisticsBalance providing cached balance calculations for performance. The framework uses the DimensionHierarchy classes to resolve budget dimensions and applies BudgetControlRule logic during transaction validation. Key classes include BudgetControlManager for orchestration, BudgetTransactionManager for posting, and BudgetSourceTrackingProcessor for maintaining document relationships. The system integrates with workflow through BudgetControlWorkflowConfiguration and uses the standard posting framework via BudgetTransactionAccountingEvent classes. Understanding the interaction between these components is crucial for customizations that maintain data integrity and performance.",
+      "code_examples": [
+        {
+          "title": "Custom Budget Control Validation Extension",
+          "description": "Demonstrates how to create a custom budget checking class that extends the standard validation with additional business rules for project-based encumbrances.",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Custom budget control validator for project-specific encumbrance rules\n/// </summary>\nclass CustomProjectBudgetValidator extends BudgetControlManager\n{\n    protected ProjTable projTable;\n    \n    public boolean validateBudgetAvailability(\n        BudgetControlConfiguration _budgetControlConfiguration,\n        Common _sourceDocument,\n        BudgetTransactionHeader _budgetTransactionHeader)\n    {\n        boolean ret = true;\n        BudgetTransactionLine budgetTransactionLine;\n        ProjId projId;\n        \n        try\n        {\n            // Call parent validation first\n            ret = super(_budgetControlConfiguration, _sourceDocument, _budgetTransactionHeader);\n            \n            if (ret && _sourceDocument.TableId == tableNum(PurchReqTable))\n            {\n                PurchReqTable purchReqTable = _sourceDocument as PurchReqTable;\n                \n                while select budgetTransactionLine\n                    where budgetTransactionLine.BudgetTransactionHeader == _budgetTransactionHeader.RecId\n                {\n                    // Extract project ID from dimension\n                    projId = this.getProjectIdFromDimension(budgetTransactionLine.LedgerDimension);\n                    \n                    if (projId && !this.validateProjectBudgetConstraints(projId, budgetTransactionLine.TransactionCurrencyAmount))\n                    {\n                        ret = false;\n                        error(strFmt(\"@CustomLabel:ProjectBudgetExceeded\", projId, budgetTransactionLine.TransactionCurrencyAmount));\n                        break;\n                    }\n                }\n            }\n        }\n        catch (Exception::Error)\n        {\n            error(\"Error during custom budget validation\");\n            ret = false;\n        }\n        \n        return ret;\n    }\n    \n    private ProjId getProjectIdFromDimension(DimensionDefault _ledgerDimension)\n    {\n        DimensionAttributeValueSetStorage dimStorage;\n        DimensionAttribute projDimAttribute;\n        ProjId projId = '';\n        \n        projDimAttribute = DimensionAttribute::findByName('Project');\n        if (projDimAttribute)\n        {\n            dimStorage = DimensionAttributeValueSetStorage::find(_ledgerDimension);\n            projId = dimStorage.getDisplayValueByDimensionAttribute(projDimAttribute.RecId);\n        }\n        \n        return projId;\n    }\n    \n    private boolean validateProjectBudgetConstraints(ProjId _projId, AmountCur _requestAmount)\n    {\n        ProjTable projTable = ProjTable::find(_projId);\n        AmountCur availableBudget, encumberedAmount;\n        \n        if (!projTable)\n            return true;\n            \n        // Get current project encumbrances\n        select sum(TransactionCurrencyAmount) from BudgetTransactionLine\n            exists join BudgetTransactionHeader\n            where BudgetTransactionHeader.RecId == BudgetTransactionLine.BudgetTransactionHeader\n            && BudgetTransactionHeader.BudgetSourceDocumentTypeId == BudgetSourceDocumentType::PurchaseRequisition\n            && this.getProjectIdFromDimension(BudgetTransactionLine.LedgerDimension) == _projId;\n            \n        encumberedAmount = BudgetTransactionLine.TransactionCurrencyAmount;\n        \n        // Custom business logic: projects with specific status have different rules\n        if (projTable.Status == ProjStatus::InProcess)\n        {\n            availableBudget = projTable.BudgetTotalAmt - encumberedAmount;\n            return (_requestAmount <= availableBudget);\n        }\n        \n        return true;\n    }\n}"
+        },
+        {
+          "title": "Encumbrance Lifecycle Management",
+          "description": "Shows how to programmatically manage encumbrance records through their complete lifecycle from creation to liquidation, including proper error handling and transaction control.",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Manages the complete lifecycle of encumbrance transactions\n/// </summary>\nclass EncumbranceLifecycleManager\n{\n    public static void createEncumbranceFromPurchReq(PurchReqTable _purchReqTable)\n    {\n        BudgetTransactionHeader budgetTransHeader;\n        BudgetTransactionLine budgetTransLine;\n        BudgetControlConfiguration budgetConfig;\n        PurchReqLine purchReqLine;\n        DimensionDefault ledgerDimension;\n        \n        ttsbegin;\n        try\n        {\n            // Get active budget control configuration\n            budgetConfig = BudgetControlConfiguration::findActive();\n            if (!budgetConfig)\n            {\n                throw error(\"No active budget control configuration found\");\n            }\n            \n            // Create header record\n            budgetTransHeader.clear();\n            budgetTransHeader.BudgetControlConfigurationRecId = budgetConfig.RecId;\n            budgetTransHeader.BudgetSourceDocumentTypeId = BudgetSourceDocumentType::PurchaseRequisition;\n            budgetTransHeader.SourceDocumentNumber = _purchReqTable.PurchReqId;\n            budgetTransHeader.SourceDocumentTableId = tableNum(PurchReqTable);\n            budgetTransHeader.SourceDocumentRecId = _purchReqTable.RecId;\n            budgetTransHeader.BudgetType = BudgetType::OriginalBudget;\n            budgetTransHeader.TransactionDate = _purchReqTable.CreatedDateTime;\n            budgetTransHeader.insert();\n            \n            // Create line records for each requisition line\n            while select purchReqLine\n                where purchReqLine.PurchReqTable == _purchReqTable.RecId\n            {\n                // Resolve full dimension for budget checking\n                ledgerDimension = this.resolveBudgetDimension(\n                    purchReqLine.ProcurementCategory,\n                    purchReqLine.DefaultDimension\n                );\n                \n                budgetTransLine.clear();\n                budgetTransLine.BudgetTransactionHeader = budgetTransHeader.RecId;\n                budgetTransLine.LedgerDimension = ledgerDimension;\n                budgetTransLine.TransactionCurrencyAmount = purchReqLine.LineAmount;\n                budgetTransLine.AccountingCurrencyAmount = Currency::mstExchangeRateAmount(\n                    _purchReqTable.CurrencyCode,\n                    CompanyInfo::standardCurrency(),\n                    purchReqLine.LineAmount,\n                    CurrencyExchangeHelper::exchangeRate(_purchReqTable.CurrencyCode, today())\n                );\n                budgetTransLine.CurrencyCode = _purchReqTable.CurrencyCode;\n                budgetTransLine.BudgetSourceTrackingRecId = this.createSourceTracking(\n                    _purchReqTable.RecId,\n                    purchReqLine.RecId\n                );\n                budgetTransLine.insert();\n                \n                info(strFmt(\"Encumbrance created for line %1: %2 %3\", \n                    purchReqLine.LineNumber,\n                    purchReqLine.LineAmount,\n                    _purchReqTable.CurrencyCode));\n            }\n            \n            ttscommit;\n        }\n        catch (Exception::Error)\n        {\n            error(\"Failed to create encumbrance records\");\n            throw;\n        }\n    }\n    \n    public static void liquidateEncumbranceOnPOConfirm(PurchTable _purchTable)\n    {\n        BudgetTransactionHeader origBudgetHeader, newBudgetHeader;\n        BudgetTransactionLine origBudgetLine, newBudgetLine;\n        BudgetSourceTracking sourceTracking;\n        \n        ttsbegin;\n        try\n        {\n            // Find original requisition encumbrance\n            select firstonly origBudgetHeader\n                where origBudgetHeader.BudgetSourceDocumentTypeId == BudgetSourceDocumentType::PurchaseRequisition\n                exists join sourceTracking\n                where sourceTracking.OriginalBudgetTransactionHeaderRecId == origBudgetHeader.RecId\n                && sourceTracking.DerivedDocumentTableId == tableNum(PurchTable)\n                && sourceTracking.DerivedDocumentRecId == _purchTable.RecId;\n            \n            if (origBudgetHeader)\n            {\n                // Create new PO encumbrance header\n                newBudgetHeader = this.copyBudgetTransactionHeader(\n                    origBudgetHeader,\n                    BudgetSourceDocumentType::PurchaseOrder,\n                    _purchTable.PurchId,\n                    _purchTable.RecId\n                );\n                \n                // Transfer encumbrance lines\n                while select origBudgetLine\n                    where origBudgetLine.BudgetTransactionHeader == origBudgetHeader.RecId\n                {\n                    // Create corresponding PO encumbrance line\n                    newBudgetLine = this.copyBudgetTransactionLine(origBudgetLine, newBudgetHeader.RecId);\n                    \n                    // Mark original as relieved\n                    origBudgetLine.BudgetTransactionStatus = BudgetTransactionStatus::Relieved;\n                    origBudgetLine.update();\n                }\n                \n                info(strFmt(\"Encumbrance transferred from requisition to PO %1\", _purchTable.PurchId));\n            }\n            \n            ttscommit;\n        }\n        catch (Exception::Error)\n        {\n            error(\"Failed to liquidate encumbrance\");\n            throw;\n        }\n    }\n    \n    private static DimensionDefault resolveBudgetDimension(\n        EcoResCategoryId _procurementCategory,\n        DimensionDefault _defaultDimension)\n    {\n        DimensionAttributeValueSetStorage dimStorage;\n        DimensionDefault resolvedDimension;\n        \n        // Merge procurement category dimensions with line dimensions\n        dimStorage = DimensionAttributeValueSetStorage::find(_defaultDimension);\n        \n        // Add category-specific dimension values if needed\n        if (_procurementCategory)\n        {\n            dimStorage = this.addCategoryDimensions(dimStorage, _procurementCategory);\n        }\n        \n        resolvedDimension = dimStorage.save();\n        return resolvedDimension;\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "BudgetControlConfiguration is the master switch — budget control only functions when an active configuration exists with properly configured document types and dimension hierarchies",
+        "BudgetSourceTracking maintains the critical link between originating documents and their derivatives — breaking this chain corrupts encumbrance liquidation workflows",
+        "Budget checking occurs at multiple transaction stages — requisition submission, PO confirmation, and invoice posting each trigger different validation paths through BudgetControlManager",
+        "Encumbrance calculations are cached in BudgetControlStatisticsBalance for performance — custom budget rules must invalidate these caches appropriately to prevent stale balance displays",
+        "The framework uses DimensionAttributeValueSetStorage extensively — understanding how dimensions resolve and merge is crucial for accurate budget allocation and custom dimension logic"
+      ],
+      "gotchas": [
+        "Never modify BudgetTransactionLine records directly without going through BudgetTransactionManager — this bypasses critical balance cache updates and can cause budget availability discrepancies that require database repairs",
+        "Budget control validation can be bypassed during data upgrade or when system administrator privileges are active — always check BudgetControlConfiguration.isActive() and user context in custom validations",
+        "Encumbrance liquidation failures during PO-to-invoice workflows leave orphaned budget records — implement proper cleanup logic using BudgetSourceTracking relationships to prevent budget leakage over time"
+      ],
+      "performance_tips": [
+        "Cache BudgetControlConfiguration lookups in batch jobs — the configuration table is read heavily during budget validation and benefits from explicit caching strategies",
+        "Use select firstonly with exists join when querying BudgetTransactionLine with BudgetSourceTracking — these tables can grow large in active budget control implementations and full table scans cause performance issues"
+      ],
+      "related_topics": [
+        "fin_general_ledger",
+        "fin_dimensions",
+        "wf_procurement"
+      ],
+      "quiz": [
+        {
+          "q": "What is the primary purpose of the BudgetSourceTracking table in D365 F&O budget control?",
+          "options": [
+            "Store budget amounts and balances",
+            "Maintain relationships between originating and derived documents",
+            "Cache budget control configuration settings",
+            "Track user permissions for budget modifications"
+          ],
+          "answer": 1,
+          "explanation": "BudgetSourceTracking maintains the hierarchical relationship between source documents (like purchase requisitions) and their derivatives (like purchase orders and invoices), enabling proper encumbrance liquidation workflows."
+        },
+        {
+          "q": "Which class should you extend to implement custom budget validation logic?",
+          "options": [
+            "BudgetControlManager",
+            "BudgetTransactionManager",
+            "BudgetControlConfiguration",
+            "BudgetSourceTrackingProcessor"
+          ],
+          "answer": 0,
+          "explanation": "BudgetControlManager is the orchestration class that handles budget validation logic. Extending this class allows you to add custom validation rules while leveraging the existing framework."
+        },
+        {
+          "q": "What happens if you modify BudgetTransactionLine records directly without using BudgetTransactionManager?",
+          "options": [
+            "The changes are automatically synchronized",
+            "Balance caches may become inconsistent",
+            "The system prevents direct modifications",
+            "Only the current user session is affected"
+          ],
+          "answer": 1,
+          "explanation": "Direct modifications bypass the balance cache update mechanisms in BudgetTransactionManager, potentially causing budget availability discrepancies that require database repairs to fix."
+        }
+      ]
+    },
+    "generated_date": "2026-04-11",
+    "auto_generated": true
   }
 ]
