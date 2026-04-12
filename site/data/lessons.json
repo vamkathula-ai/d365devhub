@@ -3416,5 +3416,98 @@
     },
     "generated_date": "2026-04-11",
     "auto_generated": true
+  },
+  {
+    "id": "fin_fixed_assets",
+    "title": "Fixed Assets Posting & Depreciation",
+    "section": "Finance",
+    "level": "Expert",
+    "duration": "45 min read",
+    "tags": [
+      "fixed-assets",
+      "depreciation",
+      "posting",
+      "finance",
+      "ledger",
+      "batch-jobs"
+    ],
+    "summary": "Master fixed asset posting patterns, depreciation engines, and custom transaction processing in D365 F&O's AssetBook framework.",
+    "content": {
+      "overview": "Fixed Assets in D365 F&O represents one of the most complex financial modules, requiring deep understanding of posting patterns, depreciation calculations, and ledger integration. The AssetBook framework manages multiple depreciation books per asset, each with distinct posting profiles and calculation methods. Expert developers must understand the interplay between AssetTable, AssetBook, AssetTrans, and the depreciation engines that drive automatic posting through AssetDepreciationRun batch jobs. This lesson covers advanced scenarios including custom depreciation methods, manual adjustments, and integration points with General Ledger posting. You'll learn to extend the depreciation framework, handle complex asset transfers, and optimize performance for large asset portfolios.",
+      "theory": "D365 F&O's fixed assets architecture centers on the AssetTable (master data) connected to multiple AssetBook records (one per book like Tax, GAAP, IFRS). Each book maintains its own AssetBookTable configuration defining depreciation methods via AssetDepreciationProfile. The core posting engine AssetPost class orchestrates transactions through AssetTrans while maintaining ledger integration via AssetLedgerAccounts and AssetPostingProfile. Depreciation calculations occur in AssetDepreciationEngine classes (Straight line, Reducing balance, etc.) triggered by AssetDepreciationRun batch framework. The AssetBookMassUpdate framework handles bulk operations. Critical to understand: AssetTrans records are immutable once posted - corrections require reversing entries. The AssetProposal framework stages depreciation before posting, allowing review/adjustment. Custom depreciation methods inherit from AssetDepreciationProfile_Base and integrate with AssetDepreciationProfileSetup. Performance relies on proper indexing on AssetTrans.AssetId + BookId + TransDate for depreciation calculations.",
+      "code_examples": [
+        {
+          "title": "Custom Depreciation Method Implementation",
+          "description": "Demonstrates creating a custom depreciation method by extending the AssetDepreciationProfile framework with custom calculation logic",
+          "language": "xpp",
+          "code": "/// Custom depreciation method for seasonal assets\nclass AssetDepreciationProfile_Seasonal extends AssetDepreciationProfile_Base\n{\n    /// Calculate seasonal depreciation based on usage patterns\n    public AssetDepreciationAmount calculateDepreciation(\n        AssetBookTable  _assetBookTable,\n        AssetBook       _assetBook,\n        TransDate       _fromDate,\n        TransDate       _toDate,\n        boolean         _fullPeriod = false)\n    {\n        AssetDepreciationAmount depreciationAmount;\n        Real                    seasonalFactor;\n        Real                    baseDepreciation;\n        int                     periodDays;\n        AssetTrans              lastTrans;\n        \n        try\n        {\n            // Get base straight-line depreciation\n            baseDepreciation = _assetBook.DepreciationYearly;\n            periodDays = _toDate - _fromDate + 1;\n            \n            // Calculate seasonal factor based on month\n            seasonalFactor = this.getSeasonalFactor(_fromDate, _toDate);\n            \n            // Check for existing transactions to avoid double depreciation\n            select firstonly lastTrans\n                where lastTrans.AssetId == _assetBook.AssetId\n                   && lastTrans.BookId == _assetBook.BookId\n                   && lastTrans.TransType == AssetTransTypeJournal::Depreciation\n                   && lastTrans.TransDate >= _fromDate\n                   && lastTrans.TransDate <= _toDate;\n            \n            if (lastTrans.RecId)\n            {\n                // Depreciation already calculated for this period\n                return depreciationAmount;\n            }\n            \n            // Calculate seasonal depreciation\n            depreciationAmount.DepreciationAmount = \n                (baseDepreciation / 365) * periodDays * seasonalFactor;\n            \n            // Ensure we don't exceed remaining book value\n            depreciationAmount.DepreciationAmount = \n                min(depreciationAmount.DepreciationAmount, \n                    _assetBook.NetBookValue);\n            \n            // Set adjustment amount if partial period\n            if (!_fullPeriod)\n            {\n                depreciationAmount.AdjustmentAmount = \n                    depreciationAmount.DepreciationAmount * 0.1;\n            }\n            \n            info(strFmt(\"Seasonal depreciation calculated: %1 for asset %2\",\n                        depreciationAmount.DepreciationAmount,\n                        _assetBook.AssetId));\n        }\n        catch (Exception::Error)\n        {\n            error(strFmt(\"Failed to calculate seasonal depreciation for asset %1: %2\",\n                         _assetBook.AssetId, infolog.text()));\n            throw Exception::Error;\n        }\n        \n        return depreciationAmount;\n    }\n    \n    /// Get seasonal multiplier based on date range\n    private Real getSeasonalFactor(TransDate _fromDate, TransDate _toDate)\n    {\n        int fromMonth = mthOfYr(_fromDate);\n        int toMonth = mthOfYr(_toDate);\n        \n        // Higher depreciation in winter months (equipment used more)\n        if (fromMonth >= 11 || fromMonth <= 2)\n            return 1.5;\n        // Lower depreciation in summer (less usage)\n        else if (fromMonth >= 6 && fromMonth <= 8)\n            return 0.7;\n        // Normal depreciation in spring/fall\n        else\n            return 1.0;\n    }\n}"
+        },
+        {
+          "title": "Asset Mass Depreciation with Custom Posting",
+          "description": "Advanced batch processing for asset depreciation with custom ledger posting and error handling",
+          "language": "xpp",
+          "code": "/// Mass depreciation processor with custom posting logic\nclass AssetDepreciationMassProcessor extends RunBaseBatch\n{\n    AssetGroupId    assetGroupId;\n    TransDate       depreciationDate;\n    boolean         postToLedger;\n    int             processedCount;\n    int             errorCount;\n    \n    /// Main processing method\n    public boolean run()\n    {\n        AssetTable          assetTable;\n        AssetBook           assetBook;\n        AssetBookTable      assetBookTable;\n        AssetTrans          assetTrans;\n        AssetPost           assetPost;\n        LedgerJournalHeader journalHeader;\n        LedgerJournalTrans  journalTrans;\n        NumberSeq           numberSeq;\n        \n        try\n        {\n            ttsbegin;\n            \n            // Create journal header for posting\n            if (postToLedger)\n            {\n                journalHeader = this.createJournalHeader();\n            }\n            \n            // Process assets in selected group\n            while select assetTable\n                where assetTable.AssetGroup == assetGroupId\n                   && assetTable.Status == AssetStatus::Open\n                join assetBook\n                where assetBook.AssetId == assetTable.AssetId\n                   && assetBook.Status == AssetStatus::Open\n                join assetBookTable\n                where assetBookTable.BookId == assetBook.BookId\n                   && assetBookTable.PostValue == NoYes::Yes\n            {\n                try\n                {\n                    // Check if depreciation needed\n                    if (this.isDepreciationRequired(assetBook))\n                    {\n                        // Calculate and create depreciation transaction\n                        assetTrans = this.createDepreciationTrans(\n                            assetBook, assetBookTable);\n                        \n                        if (assetTrans.RecId && postToLedger)\n                        {\n                            // Create corresponding ledger transactions\n                            this.createLedgerTrans(journalHeader, assetTrans);\n                        }\n                        \n                        processedCount++;\n                        \n                        // Commit every 100 records for performance\n                        if (processedCount % 100 == 0)\n                        {\n                            ttscommit;\n                            ttsbegin;\n                            info(strFmt(\"Processed %1 assets...\", processedCount));\n                        }\n                    }\n                }\n                catch (Exception::Error)\n                {\n                    errorCount++;\n                    warning(strFmt(\"Failed to process asset %1: %2\",\n                                 assetTable.AssetId, infolog.text()));\n                }\n            }\n            \n            // Post journal if created\n            if (journalHeader.RecId && postToLedger)\n            {\n                this.postJournal(journalHeader);\n            }\n            \n            ttscommit;\n            \n            info(strFmt(\"Depreciation completed. Processed: %1, Errors: %2\",\n                       processedCount, errorCount));\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(strFmt(\"Mass depreciation failed: %1\", infolog.text()));\n            return false;\n        }\n        \n        return true;\n    }\n    \n    /// Check if asset requires depreciation\n    private boolean isDepreciationRequired(AssetBook _assetBook)\n    {\n        AssetTrans lastDepreciation;\n        \n        // Check last depreciation date\n        select firstonly lastDepreciation\n            order by TransDate desc\n            where lastDepreciation.AssetId == _assetBook.AssetId\n               && lastDepreciation.BookId == _assetBook.BookId\n               && lastDepreciation.TransType == AssetTransTypeJournal::Depreciation;\n        \n        // Depreciate if no previous depreciation or last was before current period\n        return !lastDepreciation.RecId || \n               lastDepreciation.TransDate < depreciationDate;\n    }\n    \n    /// Create depreciation transaction\n    private AssetTrans createDepreciationTrans(\n        AssetBook       _assetBook,\n        AssetBookTable  _assetBookTable)\n    {\n        AssetTrans              assetTrans;\n        AssetDepreciationAmount depreciationAmount;\n        AssetPost               assetPost;\n        \n        // Calculate depreciation using configured method\n        depreciationAmount = AssetDepreciationEngine::calculateDepreciation(\n            _assetBookTable, _assetBook, depreciationDate, depreciationDate);\n        \n        if (depreciationAmount.DepreciationAmount > 0)\n        {\n            // Create transaction record\n            assetTrans.clear();\n            assetTrans.AssetId = _assetBook.AssetId;\n            assetTrans.BookId = _assetBook.BookId;\n            assetTrans.TransType = AssetTransTypeJournal::Depreciation;\n            assetTrans.TransDate = depreciationDate;\n            assetTrans.AmountCur = -depreciationAmount.DepreciationAmount;\n            assetTrans.Txt = \"Automated depreciation\";\n            assetTrans.Voucher = numberSeq.num();\n            \n            assetTrans.insert();\n            \n            // Update asset book balances\n            _assetBook.selectForUpdate(true);\n            _assetBook.AccumulatedDepreciation += depreciationAmount.DepreciationAmount;\n            _assetBook.NetBookValue -= depreciationAmount.DepreciationAmount;\n            _assetBook.update();\n        }\n        \n        return assetTrans;\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "AssetTrans records are immutable once posted — corrections require reversing entries through AssetTransReverse class",
+        "Multiple depreciation books per asset enable parallel GAAP/Tax calculations with distinct posting profiles via AssetBookTable",
+        "AssetDepreciationRun batch framework handles mass processing — always implement proper error handling and transaction batching",
+        "Custom depreciation methods must inherit AssetDepreciationProfile_Base and integrate with AssetDepreciationProfileSetup for UI configuration",
+        "Performance optimization requires proper indexing on AssetTrans (AssetId, BookId, TransDate) and batched processing for large portfolios"
+      ],
+      "gotchas": [
+        "Never directly modify AssetTrans.AmountCur after posting — use AssetAdjustment class for corrections to maintain audit trail and ledger consistency",
+        "AssetBook.NetBookValue calculations can become inconsistent during bulk updates — always use AssetBookBalanceUpdate::updateBalance() method instead of direct field updates",
+        "Depreciation calculations fail silently when AssetBookTable.PostValue is false — verify posting profile configuration before implementing custom methods"
+      ],
+      "performance_tips": [
+        "Use AssetBookMassUpdate framework for bulk operations instead of processing assets individually — provides transaction batching and progress tracking",
+        "Implement proper date range filtering in AssetTrans queries — TransDate field should always be first in where clauses for index utilization"
+      ],
+      "related_topics": [
+        "xpp_batch",
+        "xpp_financial",
+        "ledger_posting",
+        "number_sequences"
+      ],
+      "quiz": [
+        {
+          "q": "What is the correct pattern for creating custom depreciation methods in D365 F&O?",
+          "options": [
+            "Extend AssetTable and override calculateDepreciation()",
+            "Inherit from AssetDepreciationProfile_Base and implement calculateDepreciation()",
+            "Create new AssetTrans records directly with custom amounts",
+            "Modify AssetDepreciationRun class to include custom logic"
+          ],
+          "answer": 1,
+          "explanation": "Custom depreciation methods must inherit from AssetDepreciationProfile_Base and implement the calculateDepreciation() method. This ensures proper integration with the AssetDepreciationProfileSetup framework and maintains consistency with the core depreciation engine."
+        },
+        {
+          "q": "When processing mass depreciation, what is the most critical consideration for data integrity?",
+          "options": [
+            "Always process assets in AssetId sequence",
+            "Use ttsbegin/ttscommit around individual asset updates",
+            "Validate AssetBook.NetBookValue before each calculation",
+            "Implement proper transaction batching with periodic commits"
+          ],
+          "answer": 3,
+          "explanation": "Proper transaction batching with periodic commits (e.g., every 100 records) is critical for performance and recovery. Large single transactions can cause blocking and memory issues, while too frequent commits reduce performance."
+        },
+        {
+          "q": "How should you handle corrections to posted asset depreciation transactions?",
+          "options": [
+            "Update AssetTrans.AmountCur directly using selectForUpdate()",
+            "Delete the incorrect AssetTrans record and recreate",
+            "Use AssetAdjustment class to create reversing entries",
+            "Modify the AssetBook.AccumulatedDepreciation field directly"
+          ],
+          "answer": 2,
+          "explanation": "AssetTrans records are immutable once posted. Corrections must use the AssetAdjustment class to create proper reversing entries, maintaining audit trail and ensuring ledger consistency through proper posting profiles."
+        }
+      ]
+    },
+    "generated_date": "2026-04-12",
+    "auto_generated": true
   }
 ]

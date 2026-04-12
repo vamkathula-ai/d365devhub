@@ -1,5 +1,13 @@
 [
   {
+    "date": "Apr 12",
+    "tag": "LESSON",
+    "title": "Fixed Assets Posting & Depreciation",
+    "section": "Finance",
+    "level": "Expert",
+    "id": "fin_fixed_assets"
+  },
+  {
     "date": "Apr 11",
     "tag": "LESSON",
     "title": "Budget Control & Encumbrance X++",
@@ -230,13 +238,5 @@
     "section": "X++ Language",
     "level": "Intermediate",
     "id": "xpp_runbase"
-  },
-  {
-    "date": "Mar 13",
-    "tag": "LESSON",
-    "title": "Reflection: DictTable, DictField APIs",
-    "section": "X++ Language",
-    "level": "Expert",
-    "id": "xpp_reflection"
   }
 ]
