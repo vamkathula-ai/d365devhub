@@ -1,1 +1,1 @@
-Azure Service Bus: Publish & Subscribe
+Logic Apps: Error Handling & Retry

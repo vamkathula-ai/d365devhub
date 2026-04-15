@@ -1,5 +1,5 @@
 {
-  "last_index": 36,
+  "last_index": 37,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -49,9 +49,10 @@
     "fin_budget_control",
     "fin_fixed_assets",
     "fin_currency_reval",
-    "int_service_bus"
+    "int_service_bus",
+    "int_logic_apps_adv"
   ],
-  "last_run": "2026-04-14",
-  "last_title": "Azure Service Bus: Publish & Subscribe",
+  "last_run": "2026-04-15",
+  "last_title": "Logic Apps: Error Handling & Retry",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

@@ -3691,5 +3691,96 @@
     },
     "generated_date": "2026-04-14",
     "auto_generated": true
+  },
+  {
+    "id": "int_logic_apps_adv",
+    "title": "Logic Apps: Error Handling & Retry",
+    "section": "Integrations",
+    "level": "Expert",
+    "duration": "25 min read",
+    "tags": [
+      "logic-apps",
+      "error-handling",
+      "retry-patterns",
+      "integration",
+      "fault-tolerance"
+    ],
+    "summary": "Master advanced error handling and retry patterns in D365 F&O Logic Apps integrations, including exponential backoff, circuit breakers, and custom error response handling.",
+    "content": {
+      "overview": "Logic Apps integrations with D365 F&O require robust error handling and retry mechanisms to ensure reliable data exchange in production environments. Unlike simple synchronous calls, asynchronous integration patterns must handle transient failures, network timeouts, and D365 service throttling gracefully. This lesson covers advanced patterns for implementing fault-tolerant integrations that can recover from failures automatically while providing meaningful error reporting and monitoring capabilities. Understanding these patterns is crucial for enterprise-grade integrations that must maintain high availability and data consistency across systems, especially when dealing with high-volume data exchanges or critical business processes that cannot afford data loss or corruption.",
+      "theory": "D365 F&O's integration architecture exposes several key extension points for error handling in Logic Apps scenarios. The DMFDefinitionGroupExecution class provides hooks for monitoring data package processing, while the RetailCDXDataManager handles retry logic for Commerce integrations. The SysOperationFramework includes built-in retry capabilities through the SysOperationServiceController, but Logic Apps require custom handling due to their asynchronous nature. The key architectural consideration is that D365's batch framework (BatchHeader/BatchJob tables) can track long-running operations, but Logic Apps callbacks must implement their own state management. The DataManagementDefinitionGroup and DMFEntity classes provide status tracking, but custom error handling often requires extending the IntegrationFramework classes or implementing custom staging tables with proper indexing on RecId, DataAreaId, and custom status fields for efficient error recovery queries.",
+      "code_examples": [
+        {
+          "title": "Custom Error Handler for Logic Apps Integration",
+          "description": "Implements a comprehensive error handling service that tracks failures, implements exponential backoff, and provides detailed error logging for Logic Apps callbacks",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Service class for handling Logic Apps integration errors with retry logic\n/// </summary>\nclass LogicAppsErrorHandler\n{\n    private IntegrationLog integrationLog;\n    private int maxRetryAttempts;\n    private int baseDelaySeconds;\n    \n    public void new(int _maxRetries = 5, int _baseDelay = 30)\n    {\n        maxRetryAttempts = _maxRetries;\n        baseDelaySeconds = _baseDelay;\n    }\n    \n    /// <summary>\n    /// Process error with exponential backoff retry logic\n    /// </summary>\n    public boolean processIntegrationError(str _integrationId, str _errorMessage, Exception _exception, int _currentRetry = 0)\n    {\n        IntegrationErrorLog errorLog;\n        boolean shouldRetry = false;\n        int nextRetryDelay;\n        \n        ttsbegin;\n        \n        try\n        {\n            // Log the error\n            errorLog.clear();\n            errorLog.IntegrationId = _integrationId;\n            errorLog.ErrorMessage = _errorMessage;\n            errorLog.ExceptionType = enum2Str(_exception);\n            errorLog.RetryAttempt = _currentRetry;\n            errorLog.CreatedDateTime = DateTimeUtil::utcNow();\n            errorLog.Status = IntegrationErrorStatus::Failed;\n            \n            // Determine if we should retry based on error type\n            shouldRetry = this.shouldRetryError(_exception, _currentRetry);\n            \n            if (shouldRetry && _currentRetry < maxRetryAttempts)\n            {\n                // Calculate exponential backoff delay\n                nextRetryDelay = baseDelaySeconds * Power(2, _currentRetry);\n                errorLog.NextRetryDateTime = DateTimeUtil::addSeconds(DateTimeUtil::utcNow(), nextRetryDelay);\n                errorLog.Status = IntegrationErrorStatus::PendingRetry;\n                \n                info(strFmt(\"Integration %1 failed, scheduling retry %2 in %3 seconds\", \n                    _integrationId, _currentRetry + 1, nextRetryDelay));\n            }\n            else\n            {\n                errorLog.Status = IntegrationErrorStatus::Failed;\n                error(strFmt(\"Integration %1 failed permanently after %2 attempts: %3\", \n                    _integrationId, _currentRetry, _errorMessage));\n            }\n            \n            errorLog.insert();\n            ttscommit;\n            \n            // Schedule retry if applicable\n            if (shouldRetry && _currentRetry < maxRetryAttempts)\n            {\n                this.scheduleRetry(_integrationId, nextRetryDelay, _currentRetry + 1);\n            }\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(\"Failed to log integration error\");\n            throw Exception::Error;\n        }\n        \n        return shouldRetry;\n    }\n    \n    private boolean shouldRetryError(Exception _exception, int _currentRetry)\n    {\n        // Implement business logic for retryable errors\n        switch (_exception)\n        {\n            case Exception::UpdateConflict:\n            case Exception::Timeout:\n            case Exception::CLRError:\n                return true;\n            case Exception::Error:\n            case Exception::Info:\n                return false;\n            default:\n                return _currentRetry < 3; // Conservative retry for unknown errors\n        }\n    }\n    \n    private void scheduleRetry(str _integrationId, int _delaySeconds, int _retryNumber)\n    {\n        BatchHeader batchHeader;\n        BatchJob batchJob;\n        \n        // Create a batch job for delayed retry\n        batchHeader = BatchHeader::construct();\n        batchHeader.parmCaption(strFmt(\"Logic Apps Retry - %1\", _integrationId));\n        batchHeader.parmStartDateTime(DateTimeUtil::addSeconds(DateTimeUtil::utcNow(), _delaySeconds));\n        batchHeader.save();\n        \n        batchJob = batchHeader.addTask(classStr(LogicAppsRetryTask));\n        batchJob.parmMethodName(methodStr(LogicAppsRetryTask, retryIntegration));\n        batchJob.parmParmObject(con2Str([_integrationId, _retryNumber]));\n        \n        batchHeader.submit();\n    }\n}"
+        },
+        {
+          "title": "Circuit Breaker Pattern Implementation",
+          "description": "Advanced circuit breaker pattern that monitors Logic Apps endpoint health and prevents cascading failures by temporarily blocking requests to failing services",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Circuit breaker implementation for Logic Apps endpoints\n/// </summary>\nclass LogicAppsCircuitBreaker\n{\n    private str endpointUrl;\n    private CircuitBreakerState state;\n    private int failureCount;\n    private utcdatetime lastFailureTime;\n    private int failureThreshold;\n    private int timeoutSeconds;\n    private int halfOpenRetryDelay;\n    \n    public void new(str _endpointUrl, int _failureThreshold = 5, int _timeoutSeconds = 60)\n    {\n        endpointUrl = _endpointUrl;\n        state = CircuitBreakerState::Closed;\n        failureThreshold = _failureThreshold;\n        timeoutSeconds = _timeoutSeconds;\n        halfOpenRetryDelay = 300; // 5 minutes\n        this.loadState();\n    }\n    \n    /// <summary>\n    /// Execute request through circuit breaker\n    /// </summary>\n    public container executeRequest(str _requestData, str _method = 'POST')\n    {\n        container result;\n        boolean success = false;\n        str errorMessage;\n        \n        // Check circuit breaker state\n        if (!this.canExecuteRequest())\n        {\n            throw error(strFmt(\"Circuit breaker is OPEN for endpoint %1. Service temporarily unavailable.\", endpointUrl));\n        }\n        \n        try\n        {\n            // Execute the actual Logic Apps request\n            result = this.makeHttpRequest(_requestData, _method);\n            success = true;\n            \n            // Reset on successful call\n            this.onSuccess();\n        }\n        catch (Exception::Error)\n        {\n            errorMessage = infolog.text();\n            this.onFailure(errorMessage);\n            throw;\n        }\n        catch (Exception::CLRError)\n        {\n            errorMessage = \"HTTP request failed\";\n            this.onFailure(errorMessage);\n            throw;\n        }\n        \n        return result;\n    }\n    \n    private boolean canExecuteRequest()\n    {\n        utcdatetime currentTime = DateTimeUtil::utcNow();\n        \n        switch (state)\n        {\n            case CircuitBreakerState::Closed:\n                return true;\n                \n            case CircuitBreakerState::Open:\n                // Check if we should transition to half-open\n                if (DateTimeUtil::getDifference(currentTime, lastFailureTime) > halfOpenRetryDelay)\n                {\n                    state = CircuitBreakerState::HalfOpen;\n                    info(strFmt(\"Circuit breaker transitioning to HALF-OPEN for %1\", endpointUrl));\n                    return true;\n                }\n                return false;\n                \n            case CircuitBreakerState::HalfOpen:\n                return true;\n                \n            default:\n                return false;\n        }\n    }\n    \n    private void onSuccess()\n    {\n        if (state != CircuitBreakerState::Closed)\n        {\n            info(strFmt(\"Circuit breaker CLOSED for %1 - service recovered\", endpointUrl));\n        }\n        \n        state = CircuitBreakerState::Closed;\n        failureCount = 0;\n        this.saveState();\n    }\n    \n    private void onFailure(str _errorMessage)\n    {\n        failureCount++;\n        lastFailureTime = DateTimeUtil::utcNow();\n        \n        if (state == CircuitBreakerState::HalfOpen)\n        {\n            // Immediately open on half-open failure\n            state = CircuitBreakerState::Open;\n            warning(strFmt(\"Circuit breaker OPEN for %1 - half-open test failed\", endpointUrl));\n        }\n        else if (failureCount >= failureThreshold)\n        {\n            state = CircuitBreakerState::Open;\n            warning(strFmt(\"Circuit breaker OPEN for %1 - threshold exceeded (%2 failures)\", \n                endpointUrl, failureCount));\n        }\n        \n        this.saveState();\n    }\n    \n    private container makeHttpRequest(str _requestData, str _method)\n    {\n        System.Net.Http.HttpClient httpClient;\n        System.Net.Http.HttpRequestMessage request;\n        System.Net.Http.HttpResponseMessage response;\n        System.Net.Http.StringContent content;\n        str responseText;\n        \n        try\n        {\n            httpClient = new System.Net.Http.HttpClient();\n            httpClient.Timeout = System.TimeSpan::FromSeconds(timeoutSeconds);\n            \n            content = new System.Net.Http.StringContent(_requestData, \n                System.Text.Encoding::UTF8, \"application/json\");\n            \n            request = new System.Net.Http.HttpRequestMessage(\n                new System.Net.Http.HttpMethod(_method), endpointUrl);\n            request.Content = content;\n            \n            response = httpClient.SendAsync(request).Result;\n            \n            if (!response.IsSuccessStatusCode)\n            {\n                throw error(strFmt(\"HTTP %1: %2\", response.StatusCode, response.ReasonPhrase));\n            }\n            \n            responseText = response.Content.ReadAsStringAsync().Result;\n            return [true, responseText];\n        }\n        finally\n        {\n            if (httpClient)\n                httpClient.Dispose();\n        }\n    }\n    \n    private void loadState()\n    {\n        CircuitBreakerState stateRecord;\n        \n        select firstonly stateRecord\n            where stateRecord.EndpointUrl == endpointUrl;\n            \n        if (stateRecord.RecId)\n        {\n            state = stateRecord.State;\n            failureCount = stateRecord.FailureCount;\n            lastFailureTime = stateRecord.LastFailureTime;\n        }\n    }\n    \n    private void saveState()\n    {\n        CircuitBreakerState stateRecord;\n        \n        ttsbegin;\n        select forupdate stateRecord\n            where stateRecord.EndpointUrl == endpointUrl;\n            \n        if (!stateRecord.RecId)\n        {\n            stateRecord.clear();\n            stateRecord.EndpointUrl = endpointUrl;\n        }\n        \n        stateRecord.State = state;\n        stateRecord.FailureCount = failureCount;\n        stateRecord.LastFailureTime = lastFailureTime;\n        stateRecord.ModifiedDateTime = DateTimeUtil::utcNow();\n        \n        if (stateRecord.RecId)\n            stateRecord.update();\n        else\n            stateRecord.insert();\n            \n        ttscommit;\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Implement exponential backoff with jitter to prevent thundering herd problems when multiple Logic Apps retry simultaneously",
+        "Use circuit breaker patterns to protect D365 F&O from cascading failures when downstream Logic Apps endpoints become unavailable",
+        "Create custom staging tables with proper indexing (RecId, DataAreaId, IntegrationStatus) for efficient error tracking and recovery queries",
+        "Leverage D365's batch framework for scheduling delayed retries rather than blocking synchronous processes",
+        "Implement idempotency tokens in your Logic Apps requests to handle duplicate processing during retry scenarios safely"
+      ],
+      "gotchas": [
+        "Never retry authentication failures or business logic errors — only transient technical failures should trigger automatic retries to avoid infinite loops and audit trail corruption",
+        "Logic Apps timeout settings must align with D365's maximum execution time limits; exceeding these causes silent failures that are difficult to debug without proper logging",
+        "Transaction scope (ttsbegin/ttscommit) boundaries become critical when implementing retry logic — partial updates during failed retries can corrupt data integrity if not properly handled"
+      ],
+      "performance_tips": [
+        "Use async/await patterns in your Logic Apps HTTP triggers to prevent blocking D365 batch processes during long-running integration operations",
+        "Implement bulking strategies that group multiple records into single Logic Apps calls rather than individual record processing to reduce network overhead and improve throughput"
+      ],
+      "related_topics": [
+        "int_data_entities",
+        "xpp_batch",
+        "int_odata_security"
+      ],
+      "quiz": [
+        {
+          "q": "When implementing exponential backoff for Logic Apps retries, what is the primary reason for adding jitter to the delay calculation?",
+          "options": [
+            "To make retry patterns unpredictable for security",
+            "To prevent multiple failed requests from retrying simultaneously and overwhelming the service",
+            "To comply with Logic Apps rate limiting requirements",
+            "To ensure retry delays are always longer than the original request timeout"
+          ],
+          "answer": 1,
+          "explanation": "Why B is correct: Adding jitter (randomization) to exponential backoff prevents the 'thundering herd' problem where multiple failed requests retry at exactly the same intervals, potentially overwhelming the recovering service. This distributes retry attempts over time, allowing the service to recover gradually."
+        },
+        {
+          "q": "In the circuit breaker pattern implementation, what should trigger an immediate transition from HALF-OPEN back to OPEN state?",
+          "options": [
+            "Any failure during the half-open test period",
+            "Only authentication failures",
+            "Network timeout errors specifically",
+            "When the failure count exceeds the original threshold"
+          ],
+          "answer": 0,
+          "explanation": "Why A is correct: In the half-open state, the circuit breaker is testing whether the service has recovered by allowing one request through. Any failure during this test indicates the service is still unhealthy, so the circuit should immediately open again to protect the system from further failures."
+        },
+        {
+          "q": "What is the most important consideration when implementing retry logic within D365 F&O transaction boundaries (ttsbegin/ttscommit)?",
+          "options": [
+            "Retry attempts should always use separate transactions",
+            "The original transaction should be rolled back before any retry attempt",
+            "Retry logic should never be implemented within transaction boundaries",
+            "Transaction timeouts should be extended to accommodate all retry attempts"
+          ],
+          "answer": 1,
+          "explanation": "Why B is correct: When a failure occurs within a transaction, the transaction must be rolled back (ttsabort) before attempting a retry. Otherwise, partial updates from the failed attempt remain in the transaction scope, potentially causing data corruption or constraint violations in subsequent retry attempts."
+        }
+      ]
+    },
+    "generated_date": "2026-04-15",
+    "auto_generated": true
   }
 ]
