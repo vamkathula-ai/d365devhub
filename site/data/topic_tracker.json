@@ -1,5 +1,5 @@
 {
-  "last_index": 37,
+  "last_index": 38,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -50,9 +50,10 @@
     "fin_fixed_assets",
     "fin_currency_reval",
     "int_service_bus",
-    "int_logic_apps_adv"
+    "int_logic_apps_adv",
+    "int_power_automate"
   ],
-  "last_run": "2026-04-15",
-  "last_title": "Logic Apps: Error Handling & Retry",
+  "last_run": "2026-04-16",
+  "last_title": "Power Automate + D365 F&O Connectors",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
