@@ -1,5 +1,5 @@
 {
-  "last_index": 39,
+  "last_index": 40,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -52,9 +52,10 @@
     "int_service_bus",
     "int_logic_apps_adv",
     "int_power_automate",
-    "int_dataverse_link"
+    "int_dataverse_link",
+    "int_azure_data_lake"
   ],
-  "last_run": "2026-04-17",
-  "last_title": "Dataverse Link & Virtual Tables",
+  "last_run": "2026-04-18",
+  "last_title": "Azure Data Lake Export (BYOD/FnO)",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
