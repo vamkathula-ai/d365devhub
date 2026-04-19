@@ -1,5 +1,5 @@
 {
-  "last_index": 40,
+  "last_index": 41,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -53,9 +53,10 @@
     "int_logic_apps_adv",
     "int_power_automate",
     "int_dataverse_link",
-    "int_azure_data_lake"
+    "int_azure_data_lake",
+    "int_webhooks"
   ],
-  "last_run": "2026-04-18",
-  "last_title": "Azure Data Lake Export (BYOD/FnO)",
+  "last_run": "2026-04-19",
+  "last_title": "Webhooks from D365 via Business Events",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

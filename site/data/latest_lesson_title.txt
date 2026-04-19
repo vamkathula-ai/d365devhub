@@ -1,1 +1,1 @@
-Azure Data Lake Export (BYOD/FnO)
+Webhooks from D365 via Business Events

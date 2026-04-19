@@ -1,5 +1,13 @@
 [
   {
+    "date": "Apr 19",
+    "tag": "LESSON",
+    "title": "Webhooks from D365 via Business Events",
+    "section": "Integrations",
+    "level": "Expert",
+    "id": "int_webhooks"
+  },
+  {
     "date": "Apr 18",
     "tag": "LESSON",
     "title": "Azure Data Lake Export (BYOD/FnO)",
@@ -230,13 +238,5 @@
     "section": "X++ Language",
     "level": "Intermediate",
     "id": "xpp_postload"
-  },
-  {
-    "date": "Mar 20",
-    "tag": "LESSON",
-    "title": "EDTs: Inheritance, Relations, Lookups",
-    "section": "X++ Language",
-    "level": "Intermediate",
-    "id": "xpp_edt_base"
   }
 ]
