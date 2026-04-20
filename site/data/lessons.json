@@ -4165,5 +4165,96 @@
     },
     "generated_date": "2026-04-19",
     "auto_generated": true
+  },
+  {
+    "id": "int_oauth_d365",
+    "title": "OAuth 2.0 & Service-to-Service Auth",
+    "section": "Integrations",
+    "level": "Expert",
+    "duration": "25 min read",
+    "tags": [
+      "oauth",
+      "authentication",
+      "integrations",
+      "security",
+      "web-services"
+    ],
+    "summary": "Master OAuth 2.0 implementation in D365 F&O for secure service-to-service authentication using Azure AD and custom authentication frameworks.",
+    "content": {
+      "overview": "OAuth 2.0 is the industry-standard authorization framework that enables D365 F&O to securely authenticate with external services without exposing credentials. In enterprise integrations, service-to-service authentication is critical for maintaining security while enabling automated data exchange between D365 F&O and external systems like Power Platform, third-party APIs, or custom web services.\n\nD365 F&O provides multiple OAuth 2.0 flows through Azure Active Directory integration, including Client Credentials flow for daemon applications and Authorization Code flow for user-interactive scenarios. The platform's HttpWebRequestResponseHandler and OAuth2AuthenticationProvider classes form the foundation for implementing secure, token-based authentication that automatically handles token refresh and expiration scenarios.\n\nUnderstanding OAuth 2.0 implementation is essential for architects building robust integration solutions that meet enterprise security requirements while maintaining performance and reliability in high-volume transaction scenarios.",
+      "theory": "D365 F&O's OAuth 2.0 implementation leverages Azure AD as the identity provider and implements the standard OAuth 2.0 specification (RFC 6749). The core architecture centers around the System.Net.Http framework integration through classes like HttpWebRequestResponseHandler and OAuth2AuthenticationProvider.\n\nThe authentication flow typically follows the Client Credentials grant type for service-to-service scenarios. The application registers in Azure AD with specific API permissions, obtains a client ID and secret, then exchanges these credentials for access tokens at the token endpoint. D365 F&O's OAuth2AuthenticationProvider class handles token caching, automatic refresh logic, and secure credential storage.\n\nKey AOT objects involved include the OAuth2AuthenticationProvider class for token management, HttpWebRequestResponseHandler for HTTP operations, and various configuration classes for storing endpoint URLs and credential information. The system also integrates with KeyVaultParameters table for secure credential storage and SystemParameters for configuration management. Token validation occurs through Azure AD's JWT validation mechanisms, ensuring tokens are cryptographically verified before API access is granted.",
+      "code_examples": [
+        {
+          "title": "OAuth 2.0 Client Credentials Flow Implementation",
+          "description": "Complete implementation of OAuth 2.0 client credentials flow for service-to-service authentication with error handling and token caching",
+          "language": "xpp",
+          "code": "public class CustomOAuth2Service\n{\n    private str clientId;\n    private str clientSecret;\n    private str tenantId;\n    private str scope;\n    private str tokenEndpoint;\n    private OAuth2Token cachedToken;\n    \n    public void new(str _clientId, str _clientSecret, str _tenantId, str _scope)\n    {\n        clientId = _clientId;\n        clientSecret = _clientSecret;\n        tenantId = _tenantId;\n        scope = _scope;\n        tokenEndpoint = strFmt('https://login.microsoftonline.com/%1/oauth2/v2.0/token', tenantId);\n    }\n    \n    public str getAccessToken()\n    {\n        if (this.isTokenValid())\n        {\n            return cachedToken.AccessToken;\n        }\n        \n        return this.acquireNewToken();\n    }\n    \n    private boolean isTokenValid()\n    {\n        if (!cachedToken)\n        {\n            return false;\n        }\n        \n        // Check if token expires within next 5 minutes\n        utcDateTime expiryTime = cachedToken.ExpiresOn;\n        utcDateTime currentTime = DateTimeUtil::utcNow();\n        utcDateTime bufferTime = DateTimeUtil::addSeconds(currentTime, 300);\n        \n        return (expiryTime > bufferTime);\n    }\n    \n    private str acquireNewToken()\n    {\n        System.Net.Http.HttpClient httpClient;\n        System.Net.Http.HttpRequestMessage request;\n        System.Net.Http.HttpResponseMessage response;\n        System.Text.StringBuilder postData;\n        str responseContent;\n        \n        try\n        {\n            httpClient = new System.Net.Http.HttpClient();\n            request = new System.Net.Http.HttpRequestMessage(\n                System.Net.Http.HttpMethod::Post, \n                tokenEndpoint\n            );\n            \n            // Build form-encoded content\n            postData = new System.Text.StringBuilder();\n            postData.Append('grant_type=client_credentials');\n            postData.Append(strFmt('&client_id=%1', System.Web.HttpUtility::UrlEncode(clientId)));\n            postData.Append(strFmt('&client_secret=%1', System.Web.HttpUtility::UrlEncode(clientSecret)));\n            postData.Append(strFmt('&scope=%1', System.Web.HttpUtility::UrlEncode(scope)));\n            \n            request.Content = new System.Net.Http.StringContent(\n                postData.ToString(),\n                System.Text.Encoding::UTF8,\n                'application/x-www-form-urlencoded'\n            );\n            \n            response = httpClient.SendAsync(request).Result;\n            responseContent = response.Content.ReadAsStringAsync().Result;\n            \n            if (response.IsSuccessStatusCode)\n            {\n                this.parseTokenResponse(responseContent);\n                info(strFmt('OAuth token acquired successfully. Expires: %1', cachedToken.ExpiresOn));\n                return cachedToken.AccessToken;\n            }\n            else\n            {\n                error(strFmt('OAuth token acquisition failed. Status: %1, Response: %2', \n                    response.StatusCode, responseContent));\n            }\n        }\n        catch (Exception::CLRError)\n        {\n            error(strFmt('CLR error during OAuth token acquisition: %1', CLRInterop::getLastException().ToString()));\n        }\n        catch\n        {\n            error('Unexpected error during OAuth token acquisition');\n        }\n        finally\n        {\n            if (httpClient)\n            {\n                httpClient.Dispose();\n            }\n        }\n        \n        return '';\n    }\n    \n    private void parseTokenResponse(str jsonResponse)\n    {\n        System.Web.Script.Serialization.JavaScriptSerializer serializer;\n        System.Collections.Generic.Dictionary<str, System.Object> tokenData;\n        \n        serializer = new System.Web.Script.Serialization.JavaScriptSerializer();\n        tokenData = serializer.DeserializeObject(jsonResponse);\n        \n        cachedToken = new OAuth2Token();\n        cachedToken.AccessToken = tokenData.get_Item('access_token');\n        cachedToken.TokenType = tokenData.get_Item('token_type');\n        \n        // Calculate expiry time\n        int expiresIn = tokenData.get_Item('expires_in');\n        cachedToken.ExpiresOn = DateTimeUtil::addSeconds(DateTimeUtil::utcNow(), expiresIn);\n    }\n}"
+        },
+        {
+          "title": "Secure API Client with OAuth 2.0 Integration",
+          "description": "Production-grade API client that integrates OAuth 2.0 authentication with proper error handling and retry logic",
+          "language": "xpp",
+          "code": "public class SecureApiClient\n{\n    private CustomOAuth2Service oauthService;\n    private str baseApiUrl;\n    private int maxRetries;\n    \n    public void new(str _baseApiUrl, CustomOAuth2Service _oauthService)\n    {\n        baseApiUrl = _baseApiUrl;\n        oauthService = _oauthService;\n        maxRetries = 3;\n    }\n    \n    public str callSecureApi(str endpoint, str httpMethod = 'GET', str requestBody = '')\n    {\n        System.Net.Http.HttpClient httpClient;\n        System.Net.Http.HttpRequestMessage request;\n        System.Net.Http.HttpResponseMessage response;\n        str accessToken;\n        str fullUrl;\n        str responseContent;\n        int retryCount = 0;\n        \n        fullUrl = baseApiUrl + endpoint;\n        \n        while (retryCount <= maxRetries)\n        {\n            try\n            {\n                accessToken = oauthService.getAccessToken();\n                \n                if (!accessToken)\n                {\n                    error('Failed to obtain OAuth access token');\n                    return '';\n                }\n                \n                httpClient = new System.Net.Http.HttpClient();\n                httpClient.DefaultRequestHeaders.Add('Authorization', strFmt('Bearer %1', accessToken));\n                httpClient.DefaultRequestHeaders.Add('Accept', 'application/json');\n                \n                // Create request based on HTTP method\n                switch (httpMethod.ToUpper())\n                {\n                    case 'GET':\n                        request = new System.Net.Http.HttpRequestMessage(\n                            System.Net.Http.HttpMethod::Get, fullUrl);\n                        break;\n                        \n                    case 'POST':\n                        request = new System.Net.Http.HttpRequestMessage(\n                            System.Net.Http.HttpMethod::Post, fullUrl);\n                        if (requestBody)\n                        {\n                            request.Content = new System.Net.Http.StringContent(\n                                requestBody,\n                                System.Text.Encoding::UTF8,\n                                'application/json'\n                            );\n                        }\n                        break;\n                        \n                    case 'PUT':\n                        request = new System.Net.Http.HttpRequestMessage(\n                            System.Net.Http.HttpMethod::Put, fullUrl);\n                        if (requestBody)\n                        {\n                            request.Content = new System.Net.Http.StringContent(\n                                requestBody,\n                                System.Text.Encoding::UTF8,\n                                'application/json'\n                            );\n                        }\n                        break;\n                        \n                    default:\n                        error(strFmt('Unsupported HTTP method: %1', httpMethod));\n                        return '';\n                }\n                \n                response = httpClient.SendAsync(request).Result;\n                responseContent = response.Content.ReadAsStringAsync().Result;\n                \n                if (response.IsSuccessStatusCode)\n                {\n                    info(strFmt('API call successful: %1 %2', httpMethod, endpoint));\n                    return responseContent;\n                }\n                else if (response.StatusCode == System.Net.HttpStatusCode::Unauthorized && retryCount < maxRetries)\n                {\n                    // Token might be expired, clear cache and retry\n                    warning(strFmt('Unauthorized response, clearing token cache and retrying. Attempt %1', retryCount + 1));\n                    oauthService.clearTokenCache();\n                    retryCount++;\n                    continue;\n                }\n                else\n                {\n                    error(strFmt('API call failed: %1 %2. Status: %3, Response: %4', \n                        httpMethod, endpoint, response.StatusCode, responseContent));\n                    return '';\n                }\n            }\n            catch (Exception::CLRError)\n            {\n                error(strFmt('CLR error during API call: %1', CLRInterop::getLastException().ToString()));\n                if (retryCount < maxRetries)\n                {\n                    retryCount++;\n                    System.Threading.Thread::Sleep(1000 * retryCount); // Exponential backoff\n                    continue;\n                }\n            }\n            catch\n            {\n                error(strFmt('Unexpected error during API call to %1', endpoint));\n            }\n            finally\n            {\n                if (httpClient)\n                {\n                    httpClient.Dispose();\n                }\n            }\n            \n            break;\n        }\n        \n        return '';\n    }\n    \n    public boolean testConnection()\n    {\n        str testResponse = this.callSecureApi('/health', 'GET');\n        return (testResponse != '');\n    }\n}\n\n// Supporting OAuth2Token class\npublic class OAuth2Token\n{\n    public str AccessToken;\n    public str TokenType;\n    public utcDateTime ExpiresOn;\n    public str RefreshToken;\n    \n    public void new()\n    {\n        TokenType = 'Bearer';\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "OAuth 2.0 Client Credentials flow is the preferred method for service-to-service authentication in D365 F&O integrations — eliminates password-based authentication risks",
+        "Always implement token caching with proper expiry validation — prevents unnecessary token requests and improves performance by up to 90%",
+        "Use Azure Key Vault integration for storing client secrets — never hardcode credentials in X++ code or configuration files",
+        "Implement proper retry logic with exponential backoff for token acquisition failures — handles transient network issues and Azure AD throttling",
+        "Validate token expiry with buffer time (5-10 minutes) — prevents API calls with tokens that expire during request processing"
+      ],
+      "gotchas": [
+        "Token scope misconfiguration — ensure API permissions are granted in Azure AD app registration AND admin consent is provided, otherwise token requests will fail with 'invalid_scope' error",
+        "Clock skew issues between D365 F&O and Azure AD — use DateTimeUtil::utcNow() instead of local time for token expiry calculations to avoid premature token invalidation",
+        "Memory leaks with HttpClient disposal — always use try/finally blocks to dispose HttpClient instances, or connection pool exhaustion will occur after ~65k requests"
+      ],
+      "performance_tips": [
+        "Implement singleton pattern for OAuth service instances — reduces memory overhead and ensures token sharing across multiple API calls within the same session",
+        "Use async patterns with Task.Run() for bulk API operations — prevents UI blocking and improves throughput for batch integration scenarios"
+      ],
+      "related_topics": [
+        "xpp_batch",
+        "int_datamanagement",
+        "int_odata"
+      ],
+      "quiz": [
+        {
+          "q": "What is the recommended buffer time for OAuth token expiry validation in production scenarios?",
+          "options": [
+            "30 seconds",
+            "5 minutes",
+            "15 minutes",
+            "1 hour"
+          ],
+          "answer": 1,
+          "explanation": "Why 5 minutes is correct: This buffer accounts for network latency, clock skew between systems, and processing time. Too short (30s) risks token expiry during API calls, while too long (15m+) wastes valid tokens unnecessarily."
+        },
+        {
+          "q": "Which OAuth 2.0 grant type is most appropriate for D365 F&O service-to-service integrations?",
+          "options": [
+            "Authorization Code",
+            "Client Credentials",
+            "Implicit Grant",
+            "Resource Owner Password"
+          ],
+          "answer": 1,
+          "explanation": "Why Client Credentials is correct: Service-to-service scenarios don't involve user interaction, making Client Credentials the secure choice. Authorization Code requires user consent, Implicit Grant is deprecated for security reasons, and Resource Owner Password requires storing user credentials."
+        },
+        {
+          "q": "When should you clear the OAuth token cache in your retry logic?",
+          "options": [
+            "On every API failure",
+            "Only on HTTP 401 Unauthorized responses",
+            "After 3 consecutive failures",
+            "Never automatically"
+          ],
+          "answer": 1,
+          "explanation": "Why HTTP 401 only is correct: 401 Unauthorized typically indicates token expiry or invalidity, requiring a fresh token. Clearing cache on other errors (500, timeout) wastes valid tokens, while never clearing prevents recovery from token expiry scenarios."
+        }
+      ]
+    },
+    "generated_date": "2026-04-20",
+    "auto_generated": true
   }
 ]

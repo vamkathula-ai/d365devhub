@@ -1,5 +1,5 @@
 {
-  "last_index": 41,
+  "last_index": 42,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -54,9 +54,10 @@
     "int_power_automate",
     "int_dataverse_link",
     "int_azure_data_lake",
-    "int_webhooks"
+    "int_webhooks",
+    "int_oauth_d365"
   ],
-  "last_run": "2026-04-19",
-  "last_title": "Webhooks from D365 via Business Events",
+  "last_run": "2026-04-20",
+  "last_title": "OAuth 2.0 & Service-to-Service Auth",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

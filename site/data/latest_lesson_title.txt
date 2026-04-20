@@ -1,1 +1,1 @@
-Webhooks from D365 via Business Events
+OAuth 2.0 & Service-to-Service Auth
