@@ -1,5 +1,5 @@
 {
-  "last_index": 42,
+  "last_index": 43,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -55,9 +55,10 @@
     "int_dataverse_link",
     "int_azure_data_lake",
     "int_webhooks",
-    "int_oauth_d365"
+    "int_oauth_d365",
+    "perf_query_optimize"
   ],
-  "last_run": "2026-04-20",
-  "last_title": "OAuth 2.0 & Service-to-Service Auth",
+  "last_run": "2026-04-21",
+  "last_title": "Query Optimization: Indexes & Plans",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

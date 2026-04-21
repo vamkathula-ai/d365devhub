@@ -4256,5 +4256,96 @@
     },
     "generated_date": "2026-04-20",
     "auto_generated": true
+  },
+  {
+    "id": "perf_query_optimize",
+    "title": "Query Optimization: Indexes & Plans",
+    "section": "Architecture",
+    "level": "Expert",
+    "duration": "25 min read",
+    "tags": [
+      "performance",
+      "query-optimization",
+      "indexes",
+      "sql",
+      "architecture"
+    ],
+    "summary": "Master advanced query optimization techniques in D365 F&O including index design, execution plan analysis, and SQL optimization patterns for high-performance data access.",
+    "content": {
+      "overview": "Query optimization in D365 F&O is critical for enterprise-scale performance, especially when dealing with millions of records in tables like CustTrans, VendTrans, and InventTrans. Unlike traditional SQL development, D365 F&O's kernel translates X++ queries through multiple layers—from QueryRun to SQL Server execution plans—creating unique optimization challenges. Understanding how D365's query engine interacts with SQL Server indexes, how to leverage query hints, and when to use direct SQL versus QueryRun becomes essential for architects designing high-throughput solutions.\n\nThis lesson covers advanced optimization techniques including compound index design, execution plan analysis through Trace Parser, query hint usage in X++, and the critical decision points between different data access patterns. We'll explore real-world scenarios from financial and inventory modules where poor query design can bring systems to their knees, and demonstrate proven patterns used in Microsoft's own kernel code.",
+      "theory": "D365 F&O's query optimization operates through several architectural layers that developers must understand. The QueryRun framework translates X++ queries into SQL through the kernel's query compiler, which applies its own optimization rules before sending queries to SQL Server. This creates a dual-optimization challenge: optimizing for both D365's query compiler and SQL Server's query optimizer.\n\nKey architectural components include: QueryBuildDataSource for join optimization, QueryBuildRange for WHERE clause efficiency, and QueryHint enumeration for forcing specific execution paths. The kernel maintains its own query cache (QueryRunCache) separate from SQL Server's plan cache, and uses record-level security (RLS) filters that can dramatically impact query plans. Table inheritance through TableInheritanceType affects index selection, while company partitioning (DataAreaId) creates additional indexing considerations.\n\nCritical performance factors include: firstOnly() vs. exists() semantics, crossCompany() query expansion, index intersection vs. covering indexes, and the impact of RecId-based joins vs. natural key joins. Understanding SQL Server's parameter sniffing behavior with D365's parameterized queries, and how AOSQueryHint affects execution plans, separates expert developers from intermediate ones.",
+      "code_examples": [
+        {
+          "title": "Optimized Query with Compound Index Strategy",
+          "description": "Demonstrates proper index design and query construction for high-volume financial transaction queries, including execution plan analysis",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Optimized customer transaction query using compound indexes\n/// Index: (AccountNum, TransDate DESC, AmountMST) INCLUDE (Txt, Voucher)\n/// </summary>\npublic static void optimizedCustTransQuery()\n{\n    CustTrans           custTrans;\n    QueryRun            queryRun;\n    Query               query;\n    QueryBuildDataSource qbdsCustTrans;\n    QueryBuildRange     qbrAccount, qbrDate;\n    utcdatetime         fromDate, toDate;\n    \n    fromDate = DateTimeUtil::newDateTime(today()-30, 0);\n    toDate = DateTimeUtil::newDateTime(today(), 86399); // End of today\n    \n    try\n    {\n        ttsbegin;\n        \n        // Build optimized query using compound index\n        query = new Query();\n        qbdsCustTrans = query.addDataSource(tableNum(CustTrans));\n        \n        // Critical: Order ranges to match index key order\n        qbrAccount = qbdsCustTrans.addRange(fieldNum(CustTrans, AccountNum));\n        qbrAccount.value('4000');\n        \n        qbrDate = qbdsCustTrans.addRange(fieldNum(CustTrans, TransDate));\n        qbrDate.value(strFmt('(%1..%2)', \n            DateTimeUtil::toStr(fromDate), \n            DateTimeUtil::toStr(toDate)));\n        \n        // Force index usage and optimize for read-ahead\n        qbdsCustTrans.addSelectionField(fieldNum(CustTrans, RecId));\n        qbdsCustTrans.addSelectionField(fieldNum(CustTrans, AccountNum));\n        qbdsCustTrans.addSelectionField(fieldNum(CustTrans, AmountMST));\n        qbdsCustTrans.addSelectionField(fieldNum(CustTrans, Txt));\n        \n        // Set query hints for optimal execution\n        qbdsCustTrans.queryHint(AOSQueryHint::IndexHint, \n            'IX_CustTrans_AccountTransDate');\n        \n        queryRun = new QueryRun(query);\n        \n        // Process results with minimal memory footprint\n        while (queryRun.next())\n        {\n            custTrans = queryRun.get(tableNum(CustTrans));\n            \n            // Example business logic - calculate running balance\n            processTransaction(custTrans);\n        }\n        \n        ttscommit;\n        info(strFmt('Processed customer transactions for account: %1', '4000'));\n    }\n    catch (Exception::Error)\n    {\n        ttsabort;\n        error('Query optimization failed: ' + infolog.text());\n        throw Exception::Error;\n    }\n}\n\nstatic void processTransaction(CustTrans _custTrans)\n{\n    // Business logic here - kept minimal for performance\n    info(strFmt('Trans: %1, Amount: %2', \n        _custTrans.Voucher, \n        _custTrans.AmountMST));\n}"
+        },
+        {
+          "title": "Advanced Execution Plan Analysis and Query Hints",
+          "description": "Shows how to analyze query performance using trace data and apply advanced query hints for complex multi-table joins",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Advanced query optimization with execution plan analysis\n/// Handles complex inventory transaction joins with proper hint usage\n/// </summary>\nclass InventTransQueryOptimizer\n{\n    public static void analyzeInventoryMovements(ItemId _itemId)\n    {\n        Query                   query;\n        QueryRun               queryRun;\n        QueryBuildDataSource   qbdsInventTrans, qbdsInventDim, qbdsInventSum;\n        QueryBuildLink         qblInventDim, qblInventSum;\n        InventTrans            inventTrans;\n        InventDim              inventDim;\n        InventSum              inventSum;\n        \n        try\n        {\n            // Enable trace for execution plan analysis\n            if (isTraceEnabled())\n            {\n                startTrace('InventTransOptimization');\n            }\n            \n            query = new Query();\n            \n            // Primary data source - use clustered index on RecId\n            qbdsInventTrans = query.addDataSource(tableNum(InventTrans));\n            qbdsInventTrans.addRange(fieldNum(InventTrans, ItemId)).value(_itemId);\n            qbdsInventTrans.addRange(fieldNum(InventTrans, StatusIssue)).value(\n                strFmt('(%1,%2)', \n                    enum2int(StatusIssue::Sold),\n                    enum2int(StatusIssue::Deducted)));\n            \n            // Optimize join order - smaller table first\n            qbdsInventDim = qbdsInventTrans.addDataSource(tableNum(InventDim));\n            qblInventDim = qbdsInventDim.addLink(fieldNum(InventTrans, InventDimId),\n                                               fieldNum(InventDim, inventDimId));\n            qblInventDim.joinMode(JoinMode::InnerJoin);\n            \n            // Use EXISTS instead of JOIN for existence checks\n            qbdsInventSum = qbdsInventTrans.addDataSource(tableNum(InventSum));\n            qblInventSum = qbdsInventSum.addLink(fieldNum(InventTrans, ItemId),\n                                               fieldNum(InventSum, ItemId));\n            qblInventSum.joinMode(JoinMode::ExistsJoin); // More efficient than InnerJoin\n            \n            // Apply advanced query hints\n            qbdsInventTrans.queryHint(AOSQueryHint::ForceNestedLoop, '1');\n            qbdsInventTrans.queryHint(AOSQueryHint::MaxDop, '4'); // Limit parallelism\n            \n            // Order by RecId for optimal read-ahead\n            qbdsInventTrans.addOrderByField(fieldNum(InventTrans, RecId));\n            \n            queryRun = new QueryRun(query);\n            \n            int recordCount = 0;\n            utcdatetime startTime = DateTimeUtil::utcNow();\n            \n            while (queryRun.next())\n            {\n                inventTrans = queryRun.get(tableNum(InventTrans));\n                inventDim = queryRun.get(tableNum(InventDim));\n                \n                // Process with minimal overhead\n                recordCount++;\n                \n                if (recordCount % 1000 == 0)\n                {\n                    // Checkpoint every 1000 records\n                    info(strFmt('Processed %1 records', recordCount));\n                }\n            }\n            \n            utcdatetime endTime = DateTimeUtil::utcNow();\n            int64 duration = DateTimeUtil::getDifference(endTime, startTime);\n            \n            info(strFmt('Query completed: %1 records in %2 seconds', \n                recordCount, \n                duration / 1000));\n                \n            if (isTraceEnabled())\n            {\n                stopTrace();\n                analyzeTraceResults();\n            }\n        }\n        catch (Exception::Error)\n        {\n            error('Inventory query optimization failed');\n            throw Exception::Error;\n        }\n    }\n    \n    private static boolean isTraceEnabled()\n    {\n        // Check if SQL trace is enabled for performance analysis\n        return (runningOnServer() && \n                SysGlobalConfiguration::getValue(#TraceEnabled) == '1');\n    }\n    \n    private static void startTrace(str _traceName)\n    {\n        // Implementation would integrate with Trace Parser or SQL Profiler\n        info(strFmt('Starting trace: %1', _traceName));\n    }\n    \n    private static void stopTrace()\n    {\n        info('Trace stopped - analyze results in Trace Parser');\n    }\n    \n    private static void analyzeTraceResults()\n    {\n        // Parse execution plans and identify bottlenecks\n        info('Analyze execution plan for:');\n        info('- Index seek vs scan operations');\n        info('- Join algorithms (nested loop, hash, merge)');\n        info('- Key lookups and RID lookups');\n        info('- Parallelism and memory grants');\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Compound indexes should match query filter and sort order exactly — D365's query compiler cannot always reorder operations optimally",
+        "Use EXISTS joins instead of INNER joins for existence checks — they short-circuit and avoid unnecessary data retrieval in QueryRun",
+        "Query hints in X++ (AOSQueryHint) directly influence SQL Server execution plans — use IndexHint, ForceNestedLoop, and MaxDop strategically",
+        "Record-level security (RLS) filters are applied after query compilation — design indexes to support both your query and RLS predicates",
+        "firstOnly() generates different execution plans than standard selects — use for single-record lookups but never in loops"
+      ],
+      "gotchas": [
+        "Using select * with QueryRun loads all fields into memory — always specify required fields with addSelectionField() to reduce I/O and memory pressure",
+        "Query ranges with functions like strFmt() prevent index usage — pre-calculate values outside the query construction to enable index seeks",
+        "CrossCompany queries expand to UNION ALL operations — each company partition needs its own optimized indexes, multiplying storage requirements"
+      ],
+      "performance_tips": [
+        "Monitor query performance with SQL Server Profiler and Trace Parser — execution plans in D365 often differ from expectations due to RLS and company partitioning",
+        "Use covering indexes for read-heavy queries — include frequently accessed columns to eliminate key lookups, especially important for QueryRun operations"
+      ],
+      "related_topics": [
+        "xpp_select",
+        "xpp_tables",
+        "xpp_batch"
+      ],
+      "quiz": [
+        {
+          "q": "When using QueryBuildRange with compound indexes, what is the most critical factor for index effectiveness?",
+          "options": [
+            "The data types of the range fields must match exactly",
+            "Range order must match the index key column order for optimal seeks",
+            "All range values must use the equals operator",
+            "Ranges should always use the LIKE operator for flexibility"
+          ],
+          "answer": 1,
+          "explanation": "Range order must match the index key column order. SQL Server can only use an index efficiently when the WHERE clause predicates align with the index key order. If you have an index on (AccountNum, TransDate, Amount) but filter by TransDate first, SQL Server may perform an index scan instead of a seek."
+        },
+        {
+          "q": "What is the primary advantage of using EXISTS joins over INNER joins in D365 F&O QueryRun?",
+          "options": [
+            "EXISTS joins always use less memory than INNER joins",
+            "EXISTS joins support cross-company queries while INNER joins do not",
+            "EXISTS joins short-circuit after finding the first matching record, reducing I/O",
+            "EXISTS joins automatically create better execution plans"
+          ],
+          "answer": 2,
+          "explanation": "EXISTS joins short-circuit after finding the first matching record, making them significantly more efficient for existence checks. When you only need to verify that related records exist (not retrieve their data), EXISTS avoids the overhead of joining and returning the related table's columns."
+        },
+        {
+          "q": "How does record-level security (RLS) impact query optimization in D365 F&O?",
+          "options": [
+            "RLS filters are applied before query compilation, so they don't affect performance",
+            "RLS only affects security, not query performance or execution plans",
+            "RLS filters are added after query compilation and can change execution plans significantly",
+            "RLS automatically creates the necessary indexes for optimal performance"
+          ],
+          "answer": 2,
+          "explanation": "RLS filters are added after query compilation and can dramatically change execution plans. The kernel applies security filters based on user permissions, which may not align with your carefully designed indexes. This is why production performance often differs from development testing with full admin rights."
+        }
+      ]
+    },
+    "generated_date": "2026-04-21",
+    "auto_generated": true
   }
 ]
