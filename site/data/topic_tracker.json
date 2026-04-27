@@ -1,5 +1,5 @@
 {
-  "last_index": 48,
+  "last_index": 49,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -61,9 +61,10 @@
     "perf_caching",
     "perf_async_batch",
     "arch_isv_design",
-    "arch_alm_pipeline"
+    "arch_alm_pipeline",
+    "arch_multi_env"
   ],
-  "last_run": "2026-04-26",
-  "last_title": "Azure DevOps ALM for D365 F&O",
+  "last_run": "2026-04-27",
+  "last_title": "Multi-Environment Strategy (DEV/UAT/PROD)",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

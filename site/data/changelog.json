@@ -1,5 +1,13 @@
 [
   {
+    "date": "Apr 27",
+    "tag": "LESSON",
+    "title": "Multi-Environment Strategy (DEV/UAT/PROD)",
+    "section": "Architecture",
+    "level": "Expert",
+    "id": "arch_multi_env"
+  },
+  {
     "date": "Apr 26",
     "tag": "LESSON",
     "title": "Azure DevOps ALM for D365 F&O",
@@ -230,13 +238,5 @@
     "section": "Extensions",
     "level": "Intermediate",
     "id": "ext_query_extension"
-  },
-  {
-    "date": "Mar 28",
-    "tag": "LESSON",
-    "title": "Enum Extensions: Add Values Safely",
-    "section": "Extensions",
-    "level": "Beginner",
-    "id": "ext_enum_extension"
   }
 ]
