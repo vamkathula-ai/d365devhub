@@ -1,5 +1,13 @@
 [
   {
+    "date": "May 01",
+    "tag": "LESSON",
+    "title": "RAG Pipeline for X++ Code Assistant",
+    "section": "Agentic AI",
+    "level": "Expert",
+    "id": "ai_rag_xpp"
+  },
+  {
     "date": "Apr 29",
     "tag": "LESSON",
     "title": "LangChain Agents with D365 OData",
@@ -230,13 +238,5 @@
     "section": "Extensions",
     "level": "Expert",
     "id": "ext_business_event"
-  },
-  {
-    "date": "Mar 31",
-    "tag": "LESSON",
-    "title": "Custom Lookups via FormControl Extensions",
-    "section": "Extensions",
-    "level": "Intermediate",
-    "id": "ext_lookup_override"
   }
 ]

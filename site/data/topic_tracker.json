@@ -1,5 +1,5 @@
 {
-  "last_index": 51,
+  "last_index": 52,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -64,9 +64,10 @@
     "arch_alm_pipeline",
     "arch_multi_env",
     "arch_lcs_lifecycle",
-    "ai_langchain_d365"
+    "ai_langchain_d365",
+    "ai_rag_xpp"
   ],
-  "last_run": "2026-04-29",
-  "last_title": "LangChain Agents with D365 OData",
+  "last_run": "2026-05-01",
+  "last_title": "RAG Pipeline for X++ Code Assistant",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }
