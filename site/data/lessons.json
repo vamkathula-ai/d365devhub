@@ -5191,5 +5191,96 @@
     },
     "generated_date": "2026-05-01",
     "auto_generated": true
+  },
+  {
+    "id": "ai_copilot_extend",
+    "title": "Extending M365 Copilot for D365",
+    "section": "Agentic AI",
+    "level": "Expert",
+    "duration": "18 min read",
+    "tags": [
+      "copilot",
+      "ai",
+      "rest-api",
+      "odata",
+      "integration"
+    ],
+    "summary": "Master building custom D365 F&O extensions that integrate with M365 Copilot using REST APIs, OData services, and custom actions for intelligent business process automation.",
+    "content": {
+      "overview": "M365 Copilot extensibility allows D365 F&O developers to expose business logic and data through custom plugins that Copilot can invoke intelligently. This enables natural language interactions with ERP data, automated business process execution, and contextual insights delivery directly within the Microsoft 365 ecosystem. Understanding this integration is crucial for creating next-generation user experiences that bridge the gap between conversational AI and complex business operations.\n\nThe extension architecture relies on three core components: custom OData services for data exposure, REST API controllers for action execution, and properly configured metadata that enables Copilot to understand your business context. These extensions must handle authentication, maintain transactional integrity, and provide meaningful responses that Copilot can interpret and present to users. The key is designing services that are both powerful enough to handle complex business scenarios and simple enough for AI to consume effectively.",
+      "theory": "D365 F&O Copilot extensions leverage the existing service architecture built on the Application Object Server (AOS) REST stack. The SysRestServiceController framework provides the foundation for exposing custom endpoints, while the DataEntityPublicCollectionAttribute enables OData entity exposure. Custom controllers inherit from ApiController and utilize dependency injection through the SysServiceController pattern.\n\nThe integration works through the Microsoft Graph Connectors framework, where D365 becomes a data source that Copilot can query and manipulate. Your custom services must implement proper HTTP verb handling (GET for queries, POST for actions), return structured JSON responses, and include metadata annotations that help Copilot understand the semantic meaning of your operations. The SysRestServiceAttribute decorator is essential for proper endpoint registration, while the SysODataAction attribute enables complex business operations beyond simple CRUD.\n\nSecurity integration happens through the OAuth 2.0 flow with Azure AD, where the SysUserInfo and SecurityUtil classes validate tokens and enforce D365 security policies. The challenge lies in maintaining the principle of least privilege while enabling Copilot to perform meaningful operations across multiple functional areas. The SysServiceOperationAttribute allows fine-grained permission control, ensuring that AI-driven operations respect your existing security model.",
+      "code_examples": [
+        {
+          "title": "Custom OData Service for Sales Order Intelligence",
+          "description": "Exposes sales order data with intelligent filtering and aggregation capabilities for Copilot consumption",
+          "language": "xpp",
+          "code": "using System.ComponentModel.DataAnnotations;\nusing Microsoft.Dynamics.DataEntities;\n\n[DataContract]\n[DataEntityPublicCollectionAttribute('CopilotSalesOrders')]\n[DataEntityViewAttribute('CopilotSalesOrderView')]\npublic final class CopilotSalesOrderEntity extends common\n{\n    SalesId                 salesId;\n    CustAccount             custAccount;\n    CustName                customerName;\n    SalesStatus             salesStatus;\n    AmountCur               totalAmount;\n    TransDate               orderDate;\n    str                     riskLevel;\n    \n    [DataMemberAttribute('SalesId'),\n     Key,\n     Mandatory]\n    public SalesId parmSalesId(SalesId _salesId = salesId)\n    {\n        salesId = _salesId;\n        return salesId;\n    }\n    \n    [DataMemberAttribute('CustomerAccount')]\n    public CustAccount parmCustAccount(CustAccount _custAccount = custAccount)\n    {\n        custAccount = _custAccount;\n        return custAccount;\n    }\n    \n    [DataMemberAttribute('CustomerName')]\n    public CustName parmCustomerName(CustName _customerName = customerName)\n    {\n        customerName = _customerName;\n        return customerName;\n    }\n    \n    [DataMemberAttribute('SalesStatus')]\n    public SalesStatus parmSalesStatus(SalesStatus _salesStatus = salesStatus)\n    {\n        salesStatus = _salesStatus;\n        return salesStatus;\n    }\n    \n    [DataMemberAttribute('TotalAmount')]\n    public AmountCur parmTotalAmount(AmountCur _totalAmount = totalAmount)\n    {\n        totalAmount = _totalAmount;\n        return totalAmount;\n    }\n    \n    [DataMemberAttribute('OrderDate')]\n    public TransDate parmOrderDate(TransDate _orderDate = orderDate)\n    {\n        orderDate = _orderDate;\n        return orderDate;\n    }\n    \n    [DataMemberAttribute('RiskLevel')]\n    public str parmRiskLevel(str _riskLevel = riskLevel)\n    {\n        riskLevel = _riskLevel;\n        return riskLevel;\n    }\n    \n    public void mapEntityToDataSource(DataEntityRuntimeContext _entityCtx)\n    {\n        SalesTable salesTable;\n        CustTable custTable;\n        \n        select firstonly salesTable\n            join custTable\n            where salesTable.CustAccount == custTable.AccountNum\n               && salesTable.SalesId == this.parmSalesId();\n               \n        if (salesTable.RecId)\n        {\n            this.parmCustAccount(salesTable.CustAccount);\n            this.parmCustomerName(custTable.Name);\n            this.parmSalesStatus(salesTable.SalesStatus);\n            this.parmTotalAmount(SalesTable::find(salesTable.SalesId).totalAmount());\n            this.parmOrderDate(salesTable.CreatedDateTime);\n            \n            // Calculate risk level based on business logic\n            this.parmRiskLevel(this.calculateRiskLevel(salesTable));\n        }\n    }\n    \n    private str calculateRiskLevel(SalesTable _salesTable)\n    {\n        AmountCur totalAmount = SalesTable::find(_salesTable.SalesId).totalAmount();\n        CustTable custTable = CustTable::find(_salesTable.CustAccount);\n        \n        if (totalAmount > 100000 || custTable.CreditRating == CustCreditRating::Poor)\n            return 'High';\n        else if (totalAmount > 50000 || custTable.CreditRating == CustCreditRating::Average)\n            return 'Medium';\n        else\n            return 'Low';\n    }\n}"
+        },
+        {
+          "title": "REST Controller for Sales Actions",
+          "description": "Custom REST controller enabling Copilot to perform complex sales operations with proper error handling and transaction management",
+          "language": "xpp",
+          "code": "[SysRestServiceAttribute('CopilotSalesActions', 'Copilot Sales Operations')]\n[SysRestCollectionAttribute('SalesActions')]\npublic final class CopilotSalesActionsController extends SysRestServiceController\n{\n    [SysRestServiceOperationAttribute,\n     SysEntryPointAttribute(true),\n     SysODataActionAttribute('ConfirmSalesOrder', true)]\n    public str confirmSalesOrder(str _salesId, str _reason)\n    {\n        SalesTable salesTable;\n        SalesFormLetter salesFormLetter;\n        str result;\n        \n        try\n        {\n            ttsbegin;\n            \n            // Validate input parameters\n            if (!_salesId)\n            {\n                throw error(\"Sales ID is required\");\n            }\n            \n            salesTable = SalesTable::find(_salesId, true);\n            if (!salesTable.RecId)\n            {\n                throw error(strFmt(\"Sales order %1 not found\", _salesId));\n            }\n            \n            if (salesTable.SalesStatus != SalesStatus::Backorder)\n            {\n                throw error(strFmt(\"Sales order %1 cannot be confirmed. Current status: %2\", \n                    _salesId, enum2Str(salesTable.SalesStatus)));\n            }\n            \n            // Perform confirmation\n            salesFormLetter = SalesFormLetter::construct(DocumentStatus::Confirmation);\n            salesFormLetter.update(salesTable, DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone()));\n            \n            // Log the action with reason\n            this.logCopilotAction(_salesId, 'Confirmation', _reason);\n            \n            ttscommit;\n            \n            result = strFmt(\"Sales order %1 confirmed successfully\", _salesId);\n            info(result);\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            result = strFmt(\"Error confirming sales order %1: %2\", _salesId, infolog.text());\n            error(result);\n        }\n        \n        return result;\n    }\n    \n    [SysRestServiceOperationAttribute,\n     SysEntryPointAttribute(true),\n     SysODataActionAttribute('CreateSalesQuote', true)]\n    public str createSalesQuote(str _custAccount, str _requestedBy, str _description)\n    {\n        SalesQuotationTable salesQuotationTable;\n        NumberSeq numberSeq;\n        CustTable custTable;\n        str quotationId;\n        str result;\n        \n        try\n        {\n            ttsbegin;\n            \n            // Validate customer\n            custTable = CustTable::find(_custAccount);\n            if (!custTable.RecId)\n            {\n                throw error(strFmt(\"Customer %1 not found\", _custAccount));\n            }\n            \n            if (custTable.Blocked != CustVendorBlocked::No)\n            {\n                throw error(strFmt(\"Customer %1 is blocked\", _custAccount));\n            }\n            \n            // Generate quotation number\n            numberSeq = NumberSeq::newGetNum(SalesParameters::numRefSalesQuotationId());\n            quotationId = numberSeq.num();\n            \n            // Create quotation header\n            salesQuotationTable.clear();\n            salesQuotationTable.QuotationId = quotationId;\n            salesQuotationTable.CustAccount = _custAccount;\n            salesQuotationTable.QuotationType = QuotationType::Sales;\n            salesQuotationTable.QuotationStatus = SalesQuotationStatus::Created;\n            salesQuotationTable.ContactPersonId = _requestedBy;\n            salesQuotationTable.Txt = _description;\n            salesQuotationTable.QuotationDate = DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone());\n            salesQuotationTable.ExpiryDate = salesQuotationTable.QuotationDate + 30; // 30 days validity\n            \n            // Set default values from customer\n            salesQuotationTable.initFromCustTable();\n            salesQuotationTable.insert();\n            \n            // Log the action\n            this.logCopilotAction(quotationId, 'Creation', strFmt('Quote created for %1 by %2', _custAccount, _requestedBy));\n            \n            ttscommit;\n            \n            result = strFmt(\"Sales quotation %1 created successfully for customer %2\", quotationId, _custAccount);\n            info(result);\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            result = strFmt(\"Error creating sales quotation: %1\", infolog.text());\n            error(result);\n        }\n        \n        return result;\n    }\n    \n    [SysRestServiceOperationAttribute,\n     SysEntryPointAttribute(true)]\n    public container getSalesAnalytics(str _dateFrom, str _dateTo, str _custGroup = '')\n    {\n        container result;\n        SalesLine salesLine;\n        SalesTable salesTable;\n        CustTable custTable;\n        TransDate dateFrom, dateTo;\n        AmountCur totalAmount;\n        int orderCount;\n        Query query;\n        QueryBuildDataSource qbdsTable, qbdsLine, qbdsCust;\n        QueryRun queryRun;\n        \n        try\n        {\n            dateFrom = str2Date(_dateFrom, 321);\n            dateTo = str2Date(_dateTo, 321);\n            \n            if (!dateFrom || !dateTo)\n            {\n                throw error(\"Invalid date format. Use YYYY-MM-DD format\");\n            }\n            \n            // Build dynamic query\n            query = new Query();\n            qbdsTable = query.addDataSource(tableNum(SalesTable));\n            qbdsLine = qbdsTable.addDataSource(tableNum(SalesLine));\n            qbdsCust = qbdsTable.addDataSource(tableNum(CustTable));\n            \n            qbdsLine.addLink(fieldNum(SalesTable, SalesId), fieldNum(SalesLine, SalesId));\n            qbdsCust.addLink(fieldNum(SalesTable, CustAccount), fieldNum(CustTable, AccountNum));\n            \n            qbdsTable.addRange(fieldNum(SalesTable, CreatedDateTime)).value(queryRange(dateFrom, dateTo));\n            qbdsTable.addRange(fieldNum(SalesTable, SalesStatus)).value(queryNotValue(SalesStatus::Canceled));\n            \n            if (_custGroup)\n            {\n                qbdsCust.addRange(fieldNum(CustTable, CustGroup)).value(_custGroup);\n            }\n            \n            queryRun = new QueryRun(query);\n            \n            while (queryRun.next())\n            {\n                salesTable = queryRun.get(tableNum(SalesTable));\n                salesLine = queryRun.get(tableNum(SalesLine));\n                \n                totalAmount += salesLine.LineAmountMST;\n                orderCount++;\n            }\n            \n            result = [totalAmount, orderCount, totalAmount / max(orderCount, 1)];\n        }\n        catch (Exception::Error)\n        {\n            error(strFmt(\"Error retrieving sales analytics: %1\", infolog.text()));\n            result = [0.0, 0, 0.0];\n        }\n        \n        return result;\n    }\n    \n    private void logCopilotAction(str _referenceId, str _actionType, str _description)\n    {\n        // Custom logging for audit trail\n        CopilotActionLog actionLog;\n        \n        actionLog.clear();\n        actionLog.ReferenceId = _referenceId;\n        actionLog.ActionType = _actionType;\n        actionLog.Description = _description;\n        actionLog.UserId = curUserId();\n        actionLog.ActionDateTime = DateTimeUtil::utcNow();\n        actionLog.CompanyId = curExt();\n        actionLog.insert();\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Use DataEntityPublicCollectionAttribute for OData exposure and SysRestServiceController for complex operations — this dual approach gives Copilot both query and action capabilities",
+        "Implement proper transaction boundaries with ttsbegin/ttscommit around business operations — AI-driven operations must maintain data consistency even when called programmatically",
+        "Design semantic method names and clear parameter contracts — Copilot's AI relies on meaningful naming conventions to understand operation intent and context",
+        "Include comprehensive error handling with meaningful messages — Copilot needs structured error responses to provide useful feedback to users and handle failures gracefully",
+        "Implement audit logging for all Copilot-triggered operations — track AI-initiated business processes for compliance and troubleshooting purposes using custom logging tables"
+      ],
+      "gotchas": [
+        "Don't expose sensitive operations without proper authorization checks — SysEntryPointAttribute(true) bypasses some security, so validate permissions explicitly using SecurityUtil.sysUserHasMenuItemAccess()",
+        "Avoid returning large datasets without pagination — Copilot has token limits, implement $top and $skip OData parameters or use container return types for aggregated data instead of full record sets",
+        "Never assume Copilot will provide valid input parameters — always validate data types, ranges, and business rules before processing, as AI-generated inputs may not follow normal UI validation patterns"
+      ],
+      "performance_tips": [
+        "Use specific field lists in select statements for OData entities — avoid select * patterns as Copilot typically needs focused data sets for analysis and response generation",
+        "Implement caching for frequently accessed reference data using SysGlobalCache — Copilot may make repetitive calls for lookups like customer names, product descriptions, or configuration values"
+      ],
+      "related_topics": [
+        "xpp_security",
+        "xpp_batch",
+        "ai_intro"
+      ],
+      "quiz": [
+        {
+          "q": "What attribute is required to expose a data entity for OData consumption by M365 Copilot?",
+          "options": [
+            "SysRestServiceAttribute",
+            "DataEntityPublicCollectionAttribute",
+            "SysODataActionAttribute",
+            "DataEntityViewAttribute"
+          ],
+          "answer": 1,
+          "explanation": "DataEntityPublicCollectionAttribute is specifically required to expose data entities through OData endpoints that external services like M365 Copilot can consume. While DataEntityViewAttribute defines the underlying view, it's the PublicCollection attribute that enables external access."
+        },
+        {
+          "q": "Which security consideration is most critical when exposing D365 operations to Copilot?",
+          "options": [
+            "Always use SysEntryPointAttribute(false)",
+            "Implement explicit authorization checks even with SysEntryPointAttribute(true)",
+            "Disable all security for AI operations",
+            "Only use Windows authentication"
+          ],
+          "answer": 1,
+          "explanation": "SysEntryPointAttribute(true) bypasses some security layers for external service calls, making explicit authorization validation crucial. You must manually check permissions using SecurityUtil methods to ensure AI-triggered operations respect your security model."
+        },
+        {
+          "q": "What's the best practice for handling large datasets in Copilot-exposed services?",
+          "options": [
+            "Return all records for complete analysis",
+            "Implement pagination with $top and $skip parameters",
+            "Use only container return types",
+            "Limit to 10 records maximum"
+          ],
+          "answer": 1,
+          "explanation": "Implementing OData pagination with $top and $skip parameters allows Copilot to retrieve data in manageable chunks while respecting token limits and performance constraints. This approach maintains flexibility while preventing timeouts and excessive memory usage."
+        }
+      ]
+    },
+    "generated_date": "2026-05-02",
+    "auto_generated": true
   }
 ]

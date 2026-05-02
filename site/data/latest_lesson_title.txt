@@ -1,1 +1,1 @@
-RAG Pipeline for X++ Code Assistant
+Extending M365 Copilot for D365

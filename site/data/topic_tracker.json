@@ -1,5 +1,5 @@
 {
-  "last_index": 52,
+  "last_index": 53,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -65,9 +65,10 @@
     "arch_multi_env",
     "arch_lcs_lifecycle",
     "ai_langchain_d365",
-    "ai_rag_xpp"
+    "ai_rag_xpp",
+    "ai_copilot_extend"
   ],
-  "last_run": "2026-05-01",
-  "last_title": "RAG Pipeline for X++ Code Assistant",
+  "last_run": "2026-05-02",
+  "last_title": "Extending M365 Copilot for D365",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

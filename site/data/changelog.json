@@ -1,5 +1,13 @@
 [
   {
+    "date": "May 02",
+    "tag": "LESSON",
+    "title": "Extending M365 Copilot for D365",
+    "section": "Agentic AI",
+    "level": "Expert",
+    "id": "ai_copilot_extend"
+  },
+  {
     "date": "May 01",
     "tag": "LESSON",
     "title": "RAG Pipeline for X++ Code Assistant",
@@ -230,13 +238,5 @@
     "section": "Data Model",
     "level": "Expert",
     "id": "data_dixf_entities"
-  },
-  {
-    "date": "Apr 01",
-    "tag": "LESSON",
-    "title": "Business Events: Custom & OOB",
-    "section": "Extensions",
-    "level": "Expert",
-    "id": "ext_business_event"
   }
 ]
