@@ -1,5 +1,5 @@
 {
-  "last_index": 53,
+  "last_index": 54,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -66,9 +66,10 @@
     "arch_lcs_lifecycle",
     "ai_langchain_d365",
     "ai_rag_xpp",
-    "ai_copilot_extend"
+    "ai_copilot_extend",
+    "ai_azure_openai_d365"
   ],
-  "last_run": "2026-05-02",
-  "last_title": "Extending M365 Copilot for D365",
+  "last_run": "2026-05-03",
+  "last_title": "Azure OpenAI + D365 F&O Integration",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

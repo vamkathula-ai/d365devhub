@@ -1,5 +1,13 @@
 [
   {
+    "date": "May 03",
+    "tag": "LESSON",
+    "title": "Azure OpenAI + D365 F&O Integration",
+    "section": "Agentic AI",
+    "level": "Expert",
+    "id": "ai_azure_openai_d365"
+  },
+  {
     "date": "May 02",
     "tag": "LESSON",
     "title": "Extending M365 Copilot for D365",
@@ -230,13 +238,5 @@
     "section": "Data Model",
     "level": "Expert",
     "id": "data_composite_entity"
-  },
-  {
-    "date": "Apr 02",
-    "tag": "LESSON",
-    "title": "DIXF Custom Data Entities",
-    "section": "Data Model",
-    "level": "Expert",
-    "id": "data_dixf_entities"
   }
 ]

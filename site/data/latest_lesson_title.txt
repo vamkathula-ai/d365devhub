@@ -1,1 +1,1 @@
-Extending M365 Copilot for D365
+Azure OpenAI + D365 F&O Integration
