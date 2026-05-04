@@ -5379,5 +5379,97 @@
     },
     "generated_date": "2026-05-03",
     "auto_generated": true
+  },
+  {
+    "id": "ai_prompt_engineering",
+    "title": "Prompt Engineering for ERP Developers",
+    "section": "Agentic AI",
+    "level": "Intermediate",
+    "duration": "25 min read",
+    "tags": [
+      "AI",
+      "Prompt Engineering",
+      "Agentic Systems",
+      "Business Intelligence",
+      "Automation"
+    ],
+    "summary": "Master prompt engineering techniques to build AI-powered business logic and intelligent automation within D365 F&O, focusing on context-aware prompts for ERP scenarios.",
+    "content": {
+      "overview": "Prompt engineering in ERP environments requires a deep understanding of business context, data relationships, and domain-specific terminology. Unlike generic AI applications, D365 F&O prompts must consider multi-dimensional data (legal entities, sites, warehouses), complex business rules, and regulatory constraints. This lesson explores how to craft effective prompts that leverage ERP context to drive intelligent decision-making, automate complex business processes, and provide contextual insights.\n\nThe key to successful ERP prompt engineering lies in understanding the semantic relationships between business entities and translating business intent into structured, context-aware prompts. We'll examine how to build prompts that can intelligently interact with D365 data models, respect security boundaries, and maintain audit trails while providing meaningful business value.",
+      "theory": "Effective ERP prompt engineering operates on three fundamental layers: contextual data preparation, semantic business mapping, and response validation. The SysAIService framework in D365 provides the foundation for AI integration, but the real power comes from properly structuring prompts with ERP-specific context. This involves understanding the dimensional hierarchy (DataAreaId, InventSiteId, InventLocationId), business process flows (PurchReqTable -> PurchTable -> VendInvoiceJour), and regulatory constraints (TaxTrans, CustTrans posting requirements). The AI integration must respect the same security model as standard X++ operations, utilizing SecurityRights and SecurityDuty objects to ensure data access compliance. Prompts should be designed with the MenuFunction and SecurityPolicy framework in mind, ensuring that AI-generated responses align with user permissions and organizational policies.",
+      "code_examples": [
+        {
+          "title": "Context-Aware Vendor Analysis Prompt",
+          "description": "Demonstrates how to build AI prompts that incorporate ERP business context for vendor performance analysis",
+          "language": "xpp",
+          "code": "public class VendorAIAnalysisService extends SysOperationServiceBase\n{\n    public str analyzeVendorPerformance(VendAccount _vendAccount, TransDate _fromDate, TransDate _toDate)\n    {\n        VendTable vendTable;\n        PurchTable purchTable;\n        VendInvoiceJour vendInvoiceJour;\n        str contextPrompt, aiResponse;\n        container performanceMetrics;\n        \n        ttsbegin;\n        try\n        {\n            // Build ERP context for AI prompt\n            select firstonly vendTable\n                where vendTable.AccountNum == _vendAccount;\n            \n            if (!vendTable.RecId)\n            {\n                throw error(strFmt(\"Vendor %1 not found\", _vendAccount));\n            }\n            \n            // Gather performance metrics with business context\n            performanceMetrics = this.buildPerformanceContext(_vendAccount, _fromDate, _toDate);\n            \n            // Craft business-aware prompt\n            contextPrompt = strFmt(\n                \"Analyze vendor performance for %1 (%2) from %3 to %4. \"\n                + \"Business Context: Legal Entity: %5, Vendor Group: %6, Payment Terms: %7. \"\n                + \"Performance Data: %8. \"\n                + \"Provide insights on: 1) Delivery reliability 2) Quality trends 3) Cost optimization opportunities 4) Risk factors. \"\n                + \"Format response as actionable business recommendations with quantified impact where possible.\",\n                vendTable.AccountNum,\n                vendTable.Name,\n                date2Str(_fromDate, 321, DateDay::Digits2, DateSeparator::Slash, DateMonth::Digits2, DateYear::Digits4),\n                date2Str(_toDate, 321, DateDay::Digits2, DateSeparator::Slash, DateMonth::Digits2, DateYear::Digits4),\n                curext(),\n                vendTable.VendGroup,\n                vendTable.PaymTermId,\n                con2Str(performanceMetrics, ';')\n            );\n            \n            // Call AI service with structured prompt\n            aiResponse = SysAIService::processPrompt(contextPrompt, AIModelType::BusinessAnalysis);\n            \n            // Log AI interaction for audit trail\n            this.logAIInteraction(_vendAccount, contextPrompt, aiResponse);\n            \n            ttscommit;\n            \n            info(strFmt(\"AI analysis completed for vendor %1\", _vendAccount));\n            return aiResponse;\n        }\n        catch (Exception::Error)\n        {\n            ttsabort;\n            error(\"Failed to generate vendor AI analysis\");\n            return \"\";\n        }\n    }\n    \n    private container buildPerformanceContext(VendAccount _vendAccount, TransDate _fromDate, TransDate _toDate)\n    {\n        container metrics = conNull();\n        PurchLine purchLine;\n        VendInvoiceJour vendInvoiceJour;\n        InventTrans inventTrans;\n        real avgLeadTime, onTimeDeliveryRate, qualityScore;\n        int totalOrders, onTimeOrders;\n        \n        // Calculate delivery performance\n        while select count(RecId) from purchLine\n            join vendInvoiceJour\n            where vendInvoiceJour.PurchId == purchLine.PurchId\n                && vendInvoiceJour.InvoiceAccount == _vendAccount\n                && vendInvoiceJour.InvoiceDate >= _fromDate\n                && vendInvoiceJour.InvoiceDate <= _toDate\n        {\n            totalOrders++;\n            if (purchLine.DeliveryDate <= purchLine.RequestedReceiptDate)\n            {\n                onTimeOrders++;\n            }\n        }\n        \n        onTimeDeliveryRate = totalOrders > 0 ? (onTimeOrders * 100.0 / totalOrders) : 0.0;\n        \n        metrics = conIns(metrics, 1, strFmt(\"Total Orders: %1\", totalOrders));\n        metrics = conIns(metrics, 2, strFmt(\"On-Time Delivery Rate: %1%\", num2Str(onTimeDeliveryRate, 2, 2, 1, 1)));\n        metrics = conIns(metrics, 3, strFmt(\"Vendor Group Classification: %1\", this.getVendorGroupDescription(_vendAccount)));\n        \n        return metrics;\n    }\n}"
+        },
+        {
+          "title": "Intelligent Purchase Requisition Approval",
+          "description": "Shows how to create AI-driven approval recommendations with ERP business rules integration",
+          "language": "xpp",
+          "code": "public class PurchReqAIApprovalService\n{\n    public PurchReqApprovalDecision generateApprovalRecommendation(PurchReqId _purchReqId)\n    {\n        PurchReqTable purchReqTable;\n        PurchReqLine purchReqLine;\n        HcmWorker requester;\n        DirPartyTable requesterParty;\n        str approvalPrompt, aiRecommendation;\n        PurchReqApprovalDecision decision;\n        \n        select firstonly purchReqTable\n            where purchReqTable.PurchReqId == _purchReqId;\n        \n        if (!purchReqTable.RecId)\n        {\n            throw error(strFmt(\"Purchase requisition %1 not found\", _purchReqId));\n        }\n        \n        // Get requester context\n        select firstonly requester\n            join requesterParty\n            where requester.RecId == purchReqTable.Requester\n                && requesterParty.RecId == requester.Person;\n        \n        // Build comprehensive business context prompt\n        approvalPrompt = this.buildApprovalContextPrompt(\n            purchReqTable,\n            requester,\n            requesterParty\n        );\n        \n        try\n        {\n            // Get AI recommendation with business rule constraints\n            aiRecommendation = SysAIService::processPrompt(\n                approvalPrompt,\n                AIModelType::BusinessDecisionSupport\n            );\n            \n            // Parse AI response into structured decision\n            decision = this.parseAIApprovalDecision(aiRecommendation, purchReqTable);\n            \n            // Validate decision against hard business rules\n            decision = this.validateAgainstBusinessRules(decision, purchReqTable);\n            \n            // Create audit trail for AI-assisted decision\n            this.createApprovalAuditTrail(_purchReqId, approvalPrompt, aiRecommendation, decision);\n            \n            return decision;\n        }\n        catch (Exception::Error)\n        {\n            // Fallback to standard approval workflow\n            warning(\"AI approval analysis failed, reverting to standard workflow\");\n            return this.getStandardApprovalDecision(purchReqTable);\n        }\n    }\n    \n    private str buildApprovalContextPrompt(PurchReqTable _purchReqTable, HcmWorker _requester, DirPartyTable _requesterParty)\n    {\n        PurchReqLine purchReqLine;\n        str lineItemsContext = \"\";\n        real totalAmount = 0.0;\n        int lineCount = 0;\n        \n        // Aggregate line item context\n        while select purchReqLine\n            where purchReqLine.PurchReqId == _purchReqTable.PurchReqId\n        {\n            lineCount++;\n            totalAmount += purchReqLine.LineAmount;\n            lineItemsContext += strFmt(\n                \"Item: %1, Category: %2, Quantity: %3, Unit Price: %4, Vendor: %5; \",\n                purchReqLine.ItemId,\n                purchReqLine.ProcurementCategory,\n                num2Str(purchReqLine.PurchQty, 0, 2, 1, 1),\n                num2Str(purchReqLine.PurchPrice, 0, 2, 1, 1),\n                purchReqLine.VendAccount\n            );\n        }\n        \n        return strFmt(\n            \"Evaluate purchase requisition for approval. \"\n            + \"Requisition Details: ID=%1, Purpose=%2, Total Amount=%3 %4, Line Items=%5. \"\n            + \"Requester Profile: %6 (%7), Department=%8, Position=%9. \"\n            + \"Business Context: Legal Entity=%10, Site=%11, Request Date=%12. \"\n            + \"Line Items: %13 \"\n            + \"Approval Criteria: Consider budget compliance, vendor relationships, procurement policies, spend patterns, and business justification. \"\n            + \"Provide recommendation (APPROVE/REJECT/CONDITIONAL) with specific reasoning and risk assessment. \"\n            + \"If conditional approval, specify required conditions.\",\n            _purchReqTable.PurchReqId,\n            _purchReqTable.PurchReqName,\n            num2Str(totalAmount, 0, 2, 1, 1),\n            _purchReqTable.CurrencyCode,\n            lineCount,\n            _requesterParty.Name,\n            _requester.PersonnelNumber,\n            this.getWorkerDepartment(_requester.RecId),\n            this.getWorkerPosition(_requester.RecId),\n            _purchReqTable.dataAreaId,\n            this.getDefaultInventSite(_purchReqTable.Requester),\n            date2Str(_purchReqTable.RequestDate, 321, DateDay::Digits2, DateSeparator::Slash, DateMonth::Digits2, DateYear::Digits4),\n            lineItemsContext\n        );\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Structure prompts with ERP-specific business context including legal entities, dimensional data, and regulatory constraints",
+        "Incorporate security model validation to ensure AI responses respect user permissions and organizational policies",
+        "Build comprehensive business context by aggregating related data from multiple tables (header-line relationships, master-transaction patterns)",
+        "Implement fallback mechanisms when AI services are unavailable or produce invalid responses for business-critical operations",
+        "Create audit trails for all AI interactions to maintain compliance and enable decision traceability in regulated environments"
+      ],
+      "gotchas": [
+        "AI responses may not respect D365 business rules — always validate AI recommendations against hard constraints like budget limits, approval hierarchies, and regulatory requirements before execution",
+        "Context window limitations can truncate important business data — prioritize critical business context and use summarization techniques for large datasets rather than including raw data dumps",
+        "AI services may introduce latency in time-sensitive operations — implement asynchronous processing for non-critical AI enhancements and maintain synchronous fallbacks for essential business processes"
+      ],
+      "performance_tips": [
+        "Cache frequently used business context (vendor classifications, budget hierarchies) to avoid repeated database queries when building prompts for similar scenarios",
+        "Use batch processing for AI analysis of large datasets rather than individual record processing to optimize both database and AI service utilization"
+      ],
+      "related_topics": [
+        "ai_intro",
+        "ai_mcp",
+        "xpp_security",
+        "xpp_sysoperation"
+      ],
+      "quiz": [
+        {
+          "q": "When building AI prompts for ERP scenarios, what is the most critical consideration for maintaining data security?",
+          "options": [
+            "Encrypting prompt content",
+            "Validating AI responses against SecurityRights and SecurityDuty objects",
+            "Limiting prompt length",
+            "Using only public data"
+          ],
+          "answer": 1,
+          "explanation": "AI responses must respect the same security model as standard X++ operations, utilizing SecurityRights and SecurityDuty objects to ensure compliance with user permissions and organizational policies."
+        },
+        {
+          "q": "What should you do when an AI service fails during a business-critical operation in D365 F&O?",
+          "options": [
+            "Retry the AI call indefinitely",
+            "Implement fallback logic to standard business processes",
+            "Cancel the entire operation",
+            "Log an error and continue without the AI feature"
+          ],
+          "answer": 1,
+          "explanation": "Business-critical operations must have fallback mechanisms that revert to standard D365 workflows when AI services are unavailable, ensuring business continuity."
+        },
+        {
+          "q": "How should you handle large datasets when building context for AI prompts in ERP scenarios?",
+          "options": [
+            "Include all raw data in the prompt",
+            "Skip context for large datasets",
+            "Use summarization techniques and prioritize critical business context",
+            "Split into multiple separate AI calls"
+          ],
+          "answer": 2,
+          "explanation": "Context window limitations require prioritizing critical business context and using summarization techniques rather than including complete raw datasets that could be truncated."
+        }
+      ]
+    },
+    "generated_date": "2026-05-04",
+    "auto_generated": true
   }
 ]

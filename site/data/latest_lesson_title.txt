@@ -1,1 +1,1 @@
-Azure OpenAI + D365 F&O Integration
+Prompt Engineering for ERP Developers
