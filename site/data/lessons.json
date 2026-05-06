@@ -5569,5 +5569,96 @@
     },
     "generated_date": "2026-05-05",
     "auto_generated": true
+  },
+  {
+    "id": "sec_roles_duties",
+    "title": "Security Roles, Duties & Privileges",
+    "section": "Security",
+    "level": "Intermediate",
+    "duration": "25 min read",
+    "tags": [
+      "security",
+      "authorization",
+      "rbac",
+      "aot",
+      "roles"
+    ],
+    "summary": "Master D365 F&O's role-based access control (RBAC) hierarchy of security roles, duties, and privileges for implementing enterprise-grade authorization.",
+    "content": {
+      "overview": "D365 Finance & Operations implements a sophisticated role-based access control (RBAC) model built on a three-tier hierarchy: Security Roles at the top, containing multiple Duties, which in turn contain granular Privileges. This hierarchical approach enables fine-grained permission control while maintaining administrative simplicity through role composition. Understanding this security framework is crucial for any D365 developer, as it directly impacts how users interact with your custom forms, tables, and business logic.\n\nThe security model is deeply integrated into the AOT (Application Object Tree), where every securable object—from MenuItems and Forms to Tables and Classes—can be protected through specific privileges. When developing custom functionality, you must consider not only the technical implementation but also how it fits into the existing security architecture, ensuring users have appropriate access without over-privileging.",
+      "theory": "The D365 F&O security model operates through the SecurityRole, SecurityDuty, and SecurityPrivilege classes in the kernel, working in conjunction with AOT elements. Each Security Role (AOT\\Security\\Security Roles) aggregates multiple Duties, while each Duty (AOT\\Security\\Security Duties) contains related Privileges (AOT\\Security\\Security Privileges). Privileges define access to specific AOT objects like MenuItems, Forms, Tables, or Service Operations.\n\nThe authorization engine uses the SecurityRights enumeration (NoAccess=0, View=1, Edit=2, Create=3, Delete=4, FullControl=5) to determine permission levels. At runtime, the security subsystem evaluates the current user's role assignments through the SecurityUserRole table, then traverses the role-duty-privilege hierarchy to determine effective permissions. The SysSecurityFormSetup class handles form-level security initialization, while individual controls can be secured through the SecurityKey property referencing ConfigurationKey AOT elements.\n\nCustom security elements should follow Microsoft's naming conventions: roles use descriptive business names (e.g., 'SalesManager'), duties describe functional areas (e.g., 'SalesOrderProcessing'), and privileges specify granular actions (e.g., 'SalesTableView'). The security compiler validates these relationships during build, ensuring referential integrity across the security hierarchy.",
+      "code_examples": [
+        {
+          "title": "Programmatic Security Role Assignment",
+          "description": "Demonstrates how to programmatically assign security roles to users and validate role membership using the SecurityUserRole table",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Assigns a security role to a user with validation\n/// </summary>\nstatic void assignSecurityRoleToUser()\n{\n    SecurityUserRole    securityUserRole;\n    UserInfo            userInfo;\n    SecurityRole        securityRole;\n    str                 userId = 'ADMIN';\n    str                 roleName = 'SystemAdministrator';\n    \n    try\n    {\n        ttsbegin;\n        \n        // Validate user exists\n        select firstonly userInfo\n            where userInfo.id == userId;\n        \n        if (!userInfo.RecId)\n        {\n            throw error(strFmt('User %1 not found', userId));\n        }\n        \n        // Find security role\n        select firstonly securityRole\n            where securityRole.AotName == roleName;\n        \n        if (!securityRole.RecId)\n        {\n            throw error(strFmt('Security role %1 not found', roleName));\n        }\n        \n        // Check if assignment already exists\n        select firstonly securityUserRole\n            where securityUserRole.User == userId\n               && securityUserRole.SecurityRole == securityRole.RecId;\n        \n        if (securityUserRole.RecId)\n        {\n            info(strFmt('User %1 already has role %2', userId, roleName));\n            return;\n        }\n        \n        // Create new role assignment\n        securityUserRole.clear();\n        securityUserRole.User = userId;\n        securityUserRole.SecurityRole = securityRole.RecId;\n        securityUserRole.AssignmentStatus = RoleAssignmentStatus::Enabled;\n        securityUserRole.insert();\n        \n        ttscommit;\n        \n        info(strFmt('Successfully assigned role %1 to user %2', roleName, userId));\n    }\n    catch (Exception::Error)\n    {\n        ttsabort;\n        error('Failed to assign security role');\n    }\n}"
+        },
+        {
+          "title": "Runtime Permission Validation",
+          "description": "Shows how to check user permissions at runtime using the security subsystem for custom authorization logic",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Validates user permissions for specific menu items and forms\n/// </summary>\nclass CustomSecurityValidator\n{\n    /// <summary>\n    /// Checks if current user has access to a specific menu item\n    /// </summary>\n    /// <param name=\"_menuItemName\">AOT name of the menu item</param>\n    /// <param name=\"_menuItemType\">Type of menu item (Display, Output, Action)</param>\n    /// <returns>True if user has access</returns>\n    public static boolean hasMenuItemAccess(str _menuItemName, MenuItemType _menuItemType)\n    {\n        SecurityRights  rights;\n        MenuFunction    menuFunction;\n        \n        try\n        {\n            menuFunction = new MenuFunction(_menuItemName, _menuItemType);\n            \n            if (!menuFunction)\n            {\n                return false;\n            }\n            \n            // Get effective rights for current user\n            rights = menuFunction.accessRight();\n            \n            return (rights > SecurityRights::NoAccess);\n        }\n        catch (Exception::Error)\n        {\n            error(strFmt('Failed to check access for menu item %1', _menuItemName));\n            return false;\n        }\n    }\n    \n    /// <summary>\n    /// Validates table-level permissions for current user\n    /// </summary>\n    /// <param name=\"_tableId\">Table ID to check</param>\n    /// <param name=\"_accessType\">Required access level</param>\n    /// <returns>True if user has sufficient access</returns>\n    public static boolean hasTableAccess(TableId _tableId, AccessType _accessType)\n    {\n        SecurityRights  requiredRights;\n        SecurityRights  userRights;\n        Common          tableBuffer;\n        \n        // Convert AccessType to SecurityRights\n        switch (_accessType)\n        {\n            case AccessType::View:\n                requiredRights = SecurityRights::View;\n                break;\n            case AccessType::Edit:\n                requiredRights = SecurityRights::Edit;\n                break;\n            case AccessType::Delete:\n                requiredRights = SecurityRights::Delete;\n                break;\n            default:\n                return false;\n        }\n        \n        try\n        {\n            tableBuffer = new DictTable(_tableId).makeRecord();\n            userRights = tableBuffer.accessRight();\n            \n            return (userRights >= requiredRights);\n        }\n        catch (Exception::Error)\n        {\n            warning(strFmt('Could not determine table access for table ID %1', _tableId));\n            return false;\n        }\n    }\n    \n    /// <summary>\n    /// Comprehensive permission check for custom business logic\n    /// </summary>\n    public static void validateSalesOrderAccess()\n    {\n        SalesTable      salesTable;\n        boolean         hasCreateAccess;\n        boolean         hasDeleteAccess;\n        \n        // Check menu item access\n        if (!CustomSecurityValidator::hasMenuItemAccess('SalesTableListPage', MenuItemType::Display))\n        {\n            throw error('Insufficient privileges to access Sales Orders');\n        }\n        \n        // Check table permissions\n        hasCreateAccess = CustomSecurityValidator::hasTableAccess(tableNum(SalesTable), AccessType::Edit);\n        hasDeleteAccess = CustomSecurityValidator::hasTableAccess(tableNum(SalesTable), AccessType::Delete);\n        \n        info(strFmt('Sales Order Access - Create: %1, Delete: %2', \n                   hasCreateAccess ? 'Yes' : 'No',\n                   hasDeleteAccess ? 'Yes' : 'No'));\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "Security hierarchy flows from Roles → Duties → Privileges, where privileges define granular permissions on specific AOT objects",
+        "Use SecurityUserRole table to programmatically manage role assignments and SecurityRole/SecurityDuty/SecurityPrivilege for metadata queries",
+        "Runtime permission validation should use MenuFunction.accessRight() for menu items and Common.accessRight() for table operations",
+        "Custom security elements must follow naming conventions and be properly registered in AOT\\Security nodes for compiler validation",
+        "Form controls can be secured through SecurityKey properties that reference ConfigurationKey AOT elements for feature-based access control"
+      ],
+      "gotchas": [
+        "Don't check permissions by querying SecurityUserRole directly in business logic — use the security subsystem's accessRight() methods which handle inheritance and caching properly",
+        "Avoid hardcoding security role names in X++ code — roles can be renamed or customized, breaking string comparisons. Use AOT name references instead",
+        "Never bypass security checks in elevated contexts without explicit business justification — even system operations should validate permissions appropriately"
+      ],
+      "performance_tips": [
+        "Security permission checks are cached by the kernel — repeated accessRight() calls on the same objects don't cause database round-trips",
+        "Batch operations should validate permissions once per batch rather than per record to avoid excessive security subsystem calls"
+      ],
+      "related_topics": [
+        "xpp_security",
+        "aot_menus",
+        "config_keys"
+      ],
+      "quiz": [
+        {
+          "q": "What is the correct hierarchy order in D365 F&O security model?",
+          "options": [
+            "Privileges → Duties → Roles",
+            "Roles → Privileges → Duties",
+            "Roles → Duties → Privileges",
+            "Duties → Roles → Privileges"
+          ],
+          "answer": 2,
+          "explanation": "The D365 F&O security hierarchy flows from top to bottom: Security Roles contain multiple Duties, and Duties contain granular Privileges that define access to specific AOT objects."
+        },
+        {
+          "q": "Which method should you use to check if a user has access to a specific menu item at runtime?",
+          "options": [
+            "SecurityUserRole.exist()",
+            "MenuFunction.accessRight()",
+            "SecurityRole.validateAccess()",
+            "UserInfo.hasPermission()"
+          ],
+          "answer": 1,
+          "explanation": "MenuFunction.accessRight() is the correct method to check menu item permissions at runtime. It returns a SecurityRights enumeration value considering the current user's effective permissions through role inheritance."
+        },
+        {
+          "q": "When creating custom security privileges in the AOT, what naming pattern should you follow?",
+          "options": [
+            "Use descriptive business names like 'SalesManager'",
+            "Use functional area names like 'SalesOrderProcessing'",
+            "Use granular action names like 'SalesTableView'",
+            "Use generic names like 'CustomPrivilege1'"
+          ],
+          "answer": 2,
+          "explanation": "Security privileges should use granular action names that describe the specific permission being granted (e.g., 'SalesTableView', 'CustomerEdit'). Roles use business names, duties use functional areas, but privileges specify exact actions."
+        }
+      ]
+    },
+    "generated_date": "2026-05-06",
+    "auto_generated": true
   }
 ]

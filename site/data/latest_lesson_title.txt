@@ -1,1 +1,1 @@
-Teams Bot Querying D365 via MCP
+Security Roles, Duties & Privileges
