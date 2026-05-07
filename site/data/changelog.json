@@ -1,5 +1,13 @@
 [
   {
+    "date": "May 07",
+    "tag": "LESSON",
+    "title": "XDS Policies & Row-Level Security",
+    "section": "Security",
+    "level": "Expert",
+    "id": "sec_xds_policies"
+  },
+  {
     "date": "May 06",
     "tag": "LESSON",
     "title": "Security Roles, Duties & Privileges",
@@ -230,13 +238,5 @@
     "section": "Finance",
     "level": "Expert",
     "id": "fin_voucher_framework"
-  },
-  {
-    "date": "Apr 06",
-    "tag": "LESSON",
-    "title": "Data Entity Events & Staging Tables",
-    "section": "Data Model",
-    "level": "Expert",
-    "id": "data_entity_events"
   }
 ]

@@ -1,5 +1,5 @@
 {
-  "last_index": 57,
+  "last_index": 58,
   "completed": [
     "xpp_intro",
     "xpp_types",
@@ -70,9 +70,10 @@
     "ai_azure_openai_d365",
     "ai_prompt_engineering",
     "ai_teams_bot_d365",
-    "sec_roles_duties"
+    "sec_roles_duties",
+    "sec_xds_policies"
   ],
-  "last_run": "2026-05-06",
-  "last_title": "Security Roles, Duties & Privileges",
+  "last_run": "2026-05-07",
+  "last_title": "XDS Policies & Row-Level Security",
   "note": "This file tracks which topics have been auto-generated. Do not delete."
 }

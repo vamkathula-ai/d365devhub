@@ -5660,5 +5660,96 @@
     },
     "generated_date": "2026-05-06",
     "auto_generated": true
+  },
+  {
+    "id": "sec_xds_policies",
+    "title": "XDS Policies & Row-Level Security",
+    "section": "Security",
+    "level": "Expert",
+    "duration": "18 min read",
+    "tags": [
+      "security",
+      "xds",
+      "row-level-security",
+      "extensible-data-security",
+      "policies"
+    ],
+    "summary": "Master XDS (Extensible Data Security) policies to implement fine-grained row-level security controls that restrict data access based on user context and business rules in D365 F&O.",
+    "content": {
+      "overview": "Extensible Data Security (XDS) in D365 F&O provides a framework for implementing row-level security policies that go beyond traditional role-based security. While role-based security controls what users can access (tables, forms, menu items), XDS controls which specific records within those tables users can view, modify, or delete. This becomes critical in multi-company, multi-site, or hierarchical organizations where data segregation is essential for compliance and business operations.\n\nXDS policies are implemented through AOT policy objects that define constrained tables (the tables being secured) and context tables (the tables providing the security context). The framework automatically injects WHERE clauses into SQL queries at runtime, ensuring that unauthorized records are filtered out transparently. Unlike manual security implementations that require modifying every query, XDS provides centralized, declarative security that's enforced at the data access layer.\n\nThis lesson covers the architecture of XDS policies, their implementation patterns, performance implications, and advanced scenarios like policy inheritance and dynamic context switching. You'll learn to build production-grade security policies that scale with your organization's data volume and complexity while maintaining optimal query performance through proper indexing and query optimization strategies.",
+      "theory": "XDS operates through the SysSecurityPolicyBase framework, which integrates with the kernel's data access layer. When a query executes against a constrained table, the XDS framework evaluates all applicable policies and dynamically constructs additional WHERE clause predicates. The policy evaluation occurs in SysSecurityPolicyRuntime.applyPolicies(), which is called from the kernel's table selection methods.\n\nEach XDS policy inherits from SysSecurityPolicyBase and implements the authorize() method to return a Query object representing the security constraints. The framework supports three main constraint types: constrained tables (primary secured tables), context tables (tables providing security context through joins), and policy queries (the actual security logic). The XdsSecurityPolicyNonUpdateAction enum controls whether policies apply to SELECT, INSERT, UPDATE, or DELETE operations.\n\nThe policy resolution process follows this sequence: 1) Kernel detects query against constrained table, 2) SysSecurityPolicyRuntime.findPolicies() identifies applicable policies, 3) Each policy's authorize() method executes to build constraint queries, 4) Constraint queries are combined using AND logic, 5) Final WHERE clause is injected into the original query. This process is cached per user session using SysSecurityCache to minimize performance overhead on repeated queries.\n\nAdvanced XDS features include policy inheritance (where child policies can extend parent constraints), context switching (dynamically changing security context mid-session), and policy debugging through SysSecurityDiagnostics. The framework also supports cross-company policies through the crossCompanyAutoQuery property and integrates with the standard D365 caching mechanisms to ensure consistent performance across large datasets.",
+      "code_examples": [
+        {
+          "title": "Basic Customer Territory XDS Policy",
+          "description": "Implements row-level security to restrict users to customers within their assigned sales territories, demonstrating the core XDS policy structure with constrained and context tables",
+          "language": "xpp",
+          "code": "/// <summary>\n/// XDS Policy to restrict customer access by sales territory\n/// Constrained table: CustTable\n/// Context table: SalesRepTerritoryAssignment (custom table)\n/// </summary>\npublic class XdsCustomerTerritoryPolicy extends SysSecurityPolicyBase\n{\n    public Query authorize()\n    {\n        Query                       policyQuery;\n        QueryBuildDataSource        custTableDs;\n        QueryBuildDataSource        territoryDs;\n        QueryBuildRange             userRange;\n        UserId                      currentUser;\n        \n        currentUser = curUserId();\n        \n        // Build the security constraint query\n        policyQuery = new Query();\n        \n        // Add CustTable as primary datasource\n        custTableDs = policyQuery.addDataSource(tableNum(CustTable));\n        custTableDs.name('CustTable');\n        \n        // Join to territory assignment table\n        territoryDs = custTableDs.addDataSource(tableNum(SalesRepTerritoryAssignment));\n        territoryDs.name('TerritoryAssignment');\n        territoryDs.joinMode(JoinMode::InnerJoin);\n        territoryDs.relations(false);\n        \n        // Define join condition: customer territory = assigned territory\n        territoryDs.addLink(fieldNum(CustTable, SalesTerritoryId),\n                           fieldNum(SalesRepTerritoryAssignment, TerritoryId));\n        \n        // Add user constraint\n        userRange = territoryDs.addRange(fieldNum(SalesRepTerritoryAssignment, UserId));\n        userRange.value(queryValue(currentUser));\n        \n        // Add active territory constraint\n        territoryDs.addRange(fieldNum(SalesRepTerritoryAssignment, IsActive))\n                  .value(queryValue(NoYes::Yes));\n        \n        info(strFmt(\"XDS Policy applied for user %1\", currentUser));\n        \n        return policyQuery;\n    }\n    \n    /// <summary>\n    /// Override to specify which operations this policy applies to\n    /// </summary>\n    public XdsSecurityPolicyNonUpdateAction policyNonUpdateAction()\n    {\n        return XdsSecurityPolicyNonUpdateAction::AllowSelectDelete;\n    }\n    \n    /// <summary>\n    /// Enable cross-company queries if needed\n    /// </summary>\n    public boolean crossCompanyAutoQuery()\n    {\n        return true;\n    }\n}"
+        },
+        {
+          "title": "Advanced Multi-Level Hierarchical XDS Policy",
+          "description": "Complex policy demonstrating hierarchical security with dynamic context switching, policy inheritance, and performance optimization through strategic caching",
+          "language": "xpp",
+          "code": "/// <summary>\n/// Advanced XDS Policy for organizational hierarchy with dynamic context\n/// Supports manager access to subordinate data with caching optimization\n/// </summary>\npublic class XdsOrganizationalHierarchyPolicy extends SysSecurityPolicyBase\n{\n    private static Map              hierarchyCache;\n    private static utcdatetime      cacheExpiry;\n    private const int               CACHE_DURATION_MINUTES = 30;\n    \n    /// <summary>\n    /// Build hierarchical security query with caching\n    /// </summary>\n    public Query authorize()\n    {\n        Query                       policyQuery;\n        QueryBuildDataSource        empTableDs;\n        QueryBuildDataSource        hierarchyDs;\n        QueryBuildRange             hierarchyRange;\n        Set                         authorizedEmployees;\n        SetEnumerator              setEnum;\n        str                        employeeList;\n        \n        try\n        {\n            // Get authorized employee list (with caching)\n            authorizedEmployees = this.getAuthorizedEmployees();\n            \n            if (authorizedEmployees.elements() == 0)\n            {\n                // Return empty query if no access\n                policyQuery = new Query();\n                policyQuery.addDataSource(tableNum(HcmWorker));\n                policyQuery.firstDataSource().addRange(fieldNum(HcmWorker, RecId))\n                          .value('((RecId == 0))');\n                return policyQuery;\n            }\n            \n            // Build employee ID list for IN clause\n            setEnum = authorizedEmployees.getEnumerator();\n            employeeList = '';\n            \n            while (setEnum.moveNext())\n            {\n                if (employeeList != '')\n                    employeeList += ',';\n                employeeList += strFmt(\"'%1'\", setEnum.current());\n            }\n            \n            // Create optimized query using IN clause\n            policyQuery = new Query();\n            empTableDs = policyQuery.addDataSource(tableNum(HcmWorker));\n            empTableDs.name('AuthorizedWorkers');\n            \n            hierarchyRange = empTableDs.addRange(fieldNum(HcmWorker, PersonnelNumber));\n            hierarchyRange.value(strFmt('((%1.%2 IN (%3)))',\n                                      empTableDs.name(),\n                                      fieldStr(HcmWorker, PersonnelNumber),\n                                      employeeList));\n            \n            info(strFmt(\"Hierarchical XDS: %1 employees authorized for %2\", \n                       authorizedEmployees.elements(), curUserId()));\n        }\n        catch (Exception::Error)\n        {\n            error(\"XDS Policy authorization failed - access denied\");\n            throw Exception::Error;\n        }\n        \n        return policyQuery;\n    }\n    \n    /// <summary>\n    /// Get authorized employees with hierarchical caching\n    /// </summary>\n    private Set getAuthorizedEmployees()\n    {\n        Set                         authorizedSet;\n        HcmPositionHierarchy        hierarchyTable;\n        HcmWorker                   workerTable;\n        UserId                      currentUser;\n        str                         cacheKey;\n        utcdatetime                 now;\n        \n        currentUser = curUserId();\n        cacheKey = strFmt(\"%1_hierarchy\", currentUser);\n        now = DateTimeUtil::utcNow();\n        \n        // Initialize cache if needed\n        if (!hierarchyCache)\n        {\n            hierarchyCache = new Map(Types::String, Types::Class);\n            cacheExpiry = now;\n        }\n        \n        // Check cache validity\n        if (cacheExpiry < now || !hierarchyCache.exists(cacheKey))\n        {\n            authorizedSet = new Set(Types::String);\n            \n            // Add current user's employee ID\n            select PersonnelNumber from workerTable\n                where workerTable.UserId == currentUser;\n            \n            if (workerTable.PersonnelNumber)\n            {\n                authorizedSet.add(workerTable.PersonnelNumber);\n            }\n            \n            // Add subordinates recursively\n            this.addSubordinates(authorizedSet, workerTable.PersonnelNumber, 0);\n            \n            // Cache the result\n            hierarchyCache.insert(cacheKey, authorizedSet);\n            cacheExpiry = DateTimeUtil::addMinutes(now, CACHE_DURATION_MINUTES);\n        }\n        else\n        {\n            // Use cached result\n            authorizedSet = hierarchyCache.lookup(cacheKey);\n        }\n        \n        return authorizedSet;\n    }\n    \n    /// <summary>\n    /// Recursively add subordinates to authorized set\n    /// </summary>\n    private void addSubordinates(Set _authorizedSet, HcmPersonnelNumberId _managerId, int _depth)\n    {\n        HcmPositionHierarchy        hierarchyTable;\n        HcmWorker                   subordinateWorker;\n        \n        // Prevent infinite recursion\n        if (_depth > 10)\n            return;\n            \n        while select PersonnelNumber from subordinateWorker\n            exists join hierarchyTable\n            where hierarchyTable.SubordinatePersonnelNumber == subordinateWorker.PersonnelNumber\n               && hierarchyTable.ManagerPersonnelNumber == _managerId\n               && hierarchyTable.ValidFrom <= DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone())\n               && hierarchyTable.ValidTo >= DateTimeUtil::getSystemDate(DateTimeUtil::getUserPreferredTimeZone())\n        {\n            if (!_authorizedSet.in(subordinateWorker.PersonnelNumber))\n            {\n                _authorizedSet.add(subordinateWorker.PersonnelNumber);\n                // Recursively add subordinates of subordinates\n                this.addSubordinates(_authorizedSet, subordinateWorker.PersonnelNumber, _depth + 1);\n            }\n        }\n    }\n    \n    public boolean crossCompanyAutoQuery()\n    {\n        return false; // Hierarchy is company-specific\n    }\n    \n    /// <summary>\n    /// Clear cache when security context changes\n    /// </summary>\n    public static void clearHierarchyCache()\n    {\n        if (hierarchyCache)\n        {\n            hierarchyCache = null;\n            cacheExpiry = DateTimeUtil::minValue();\n        }\n    }\n}"
+        }
+      ],
+      "key_points": [
+        "XDS policies execute at the kernel level, automatically injecting WHERE clauses into all SELECT, INSERT, UPDATE, and DELETE operations against constrained tables — this provides transparent, centralized security enforcement",
+        "The authorize() method must return an optimized Query object with proper join relationships and range constraints, as this query structure directly impacts database query performance and execution plans",
+        "Policy resolution follows a strict sequence: findPolicies() → authorize() → query combination → WHERE clause injection, with results cached per user session to minimize repeated policy evaluation overhead",
+        "Context tables should have appropriate indexes on join columns and constraint fields, as XDS joins are executed for every query against constrained tables and can become performance bottlenecks",
+        "Use crossCompanyAutoQuery() judiciously — enabling it allows cross-company data access but can significantly impact query performance and may bypass intended data segregation controls"
+      ],
+      "gotchas": [
+        "Never use select statements inside authorize() method — this creates recursive policy evaluation as the select triggers additional XDS checks, leading to stack overflow or infinite loops that crash the client",
+        "Avoid complex subqueries or multiple nested joins in policy queries — the kernel optimizes simple join structures much better, and complex queries can cause exponential performance degradation on large datasets",
+        "Don't rely on cached data or static variables for security decisions without proper invalidation — security context can change mid-session through role switching or delegation, requiring cache invalidation mechanisms"
+      ],
+      "performance_tips": [
+        "Create composite indexes on (UserId, EntityId, ValidFrom, ValidTo) for context tables to optimize policy query joins and date range filtering — this single index can eliminate table scans in most XDS scenarios",
+        "Use IN clauses with pre-built lists instead of EXISTS subqueries when authorizing multiple records — this allows the query optimizer to use index seeks rather than correlated subqueries that scan for each row"
+      ],
+      "related_topics": [
+        "xpp_security",
+        "xpp_select",
+        "xpp_crosscompany"
+      ],
+      "quiz": [
+        {
+          "q": "What happens when an XDS policy's authorize() method contains a select statement against a constrained table?",
+          "options": [
+            "The query executes normally with applied security",
+            "Recursive policy evaluation occurs causing stack overflow",
+            "The policy is bypassed for that query",
+            "An automatic transaction rollback is triggered"
+          ],
+          "answer": 1,
+          "explanation": "When authorize() contains select statements against constrained tables, it triggers recursive policy evaluation because the select statement itself triggers XDS policy checks, creating an infinite loop that leads to stack overflow exceptions and client crashes."
+        },
+        {
+          "q": "Which method controls whether an XDS policy applies to SELECT, INSERT, UPDATE, or DELETE operations?",
+          "options": [
+            "authorize()",
+            "policyNonUpdateAction()",
+            "crossCompanyAutoQuery()",
+            "validatePolicy()"
+          ],
+          "answer": 1,
+          "explanation": "The policyNonUpdateAction() method returns XdsSecurityPolicyNonUpdateAction enum values that specify which non-update operations (SELECT, DELETE) the policy applies to, while INSERT and UPDATE operations are controlled separately through the policy framework."
+        },
+        {
+          "q": "What is the primary performance risk when enabling crossCompanyAutoQuery() in XDS policies?",
+          "options": [
+            "Increased memory usage from cross-company caching",
+            "Potential data segregation bypass and query performance impact",
+            "Automatic transaction scope expansion across companies",
+            "Recursive policy evaluation across company boundaries"
+          ],
+          "answer": 1,
+          "explanation": "Enabling crossCompanyAutoQuery() allows queries to span multiple companies, which can bypass intended data segregation controls and significantly impact performance due to cross-company joins and expanded result sets that may not be properly indexed across company boundaries."
+        }
+      ]
+    },
+    "generated_date": "2026-05-07",
+    "auto_generated": true
   }
 ]
